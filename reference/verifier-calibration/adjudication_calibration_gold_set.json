@@ -1,0 +1,150 @@
+{
+  "description": "Gold set for calibrating atomic-claim adjudication thresholds (min_entailment_percent, contradiction_threshold_percent). Each case pairs a claim with one evidence snippet and the expected NLI verdict. Human-reviewed for factual accuracy.",
+  "version": "1.0.0",
+  "cases": [
+    {
+      "claim": "The Declaration of Independence was adopted on July 4, 1776.",
+      "evidence_snippet": "Declaration of Independence adoption date: July 4, 1776. Delegates at the Second Continental Congress voted to approve the declaration.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Declaration of Independence was adopted in 1812.",
+      "evidence_snippet": "Declaration of Independence adoption date: July 4, 1776.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "George Washington was the first president of the United States.",
+      "evidence_snippet": "George Washington served as the first President of the United States from 1789 to 1797.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "George Washington was the third president.",
+      "evidence_snippet": "George Washington was the first president of the United States, not the third.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Civil War began in 1861.",
+      "evidence_snippet": "American Civil War start date: April 12, 1861 (attack on Fort Sumter).",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Civil War ended in 1865.",
+      "evidence_snippet": "American Civil War end date: April 9, 1865 (Lee's surrender at Appomattox).",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The 13th Amendment abolished slavery.",
+      "evidence_snippet": "Thirteenth Amendment ratified December 6, 1865, formally abolished slavery in the United States.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Emancipation Proclamation freed all slaves in the United States.",
+      "evidence_snippet": "The Emancipation Proclamation applied only to Confederate states in rebellion and did not free enslaved people in border states or Union-held territories.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The 19th Amendment gave women the right to vote.",
+      "evidence_snippet": "Nineteenth Amendment ratified August 18, 1920; granted women the right to vote.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The 19th Amendment was ratified in 1910.",
+      "evidence_snippet": "Nineteenth Amendment ratification date: August 18, 1920.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The United States dropped atomic bombs on Hiroshima and Nagasaki in 1945.",
+      "evidence_snippet": "Atomic bombing of Hiroshima: August 6, 1945; Nagasaki: August 9, 1945.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "Pearl Harbor was attacked in 1914.",
+      "evidence_snippet": "Attack on Pearl Harbor occurred on December 7, 1941.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Brown v. Board of Education decision declared segregation unconstitutional.",
+      "evidence_snippet": "Brown v. Board of Education, decided May 17, 1954, ruled racial segregation in public schools unconstitutional.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Civil Rights Act of 1964 was signed by President Eisenhower.",
+      "evidence_snippet": "Civil Rights Act of 1964 was signed by President Lyndon B. Johnson on July 2, 1964, not by Eisenhower.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Apollo 11 mission landed astronauts on the Moon in 1969.",
+      "evidence_snippet": "Apollo 11 lunar landing: July 20, 1969; Neil Armstrong and Buzz Aldrin became the first humans on the Moon.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Louisiana Purchase doubled the size of the United States.",
+      "evidence_snippet": "Louisiana Purchase completed 1803; United States land area approximately doubled as a result.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The New Deal was a military alliance signed in 1945.",
+      "evidence_snippet": "The New Deal was a domestic economic recovery program enacted 1933–1939 under Franklin D. Roosevelt, not a military alliance.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Affordable Care Act was signed in 2010.",
+      "evidence_snippet": "Affordable Care Act signed March 23, 2010 by President Barack Obama.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "Abraham Lincoln was the 16th President of the United States.",
+      "evidence_snippet": "Abraham Lincoln was the 16th President, serving from 1861 to 1865.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "Abraham Lincoln was the 20th President of the United States.",
+      "evidence_snippet": "Abraham Lincoln was the 16th President of the United States, not the 20th.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Great Depression began in 1929.",
+      "evidence_snippet": "The Great Depression began with the stock market crash of October 1929.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The United States entered World War I in 1920.",
+      "evidence_snippet": "The United States declared war on Germany and entered World War I on April 6, 1917, not in 1920.",
+      "expected_verdict": "contradicted",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Constitutional Convention met in Philadelphia in 1787.",
+      "evidence_snippet": "The Constitutional Convention convened in Philadelphia in 1787 to draft a new constitution.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    },
+    {
+      "claim": "The Voting Rights Act was signed in 1965.",
+      "evidence_snippet": "Voting Rights Act of 1965 signed August 6, 1965, prohibiting discriminatory voting practices.",
+      "expected_verdict": "supported",
+      "topic": "us_history"
+    }
+  ]
+}

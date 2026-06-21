@@ -1,0 +1,147 @@
+{
+  "description": "Gold benchmark for publication-profile QA scorecard/gating behavior.",
+  "cases": [
+    {
+      "id": "high_quality_pass_case",
+      "gate_result": {
+        "passed": true,
+        "unsupported_total": 0
+      },
+      "verification_report": {
+        "dead_links": [],
+        "restricted_links": [],
+        "non_authoritative_domains": [],
+        "duplicate_references": [],
+        "missing_registry_entries": []
+      },
+      "retrieval_report": {
+        "aggregate": {
+          "sentence_coverage_rate": 1.0,
+          "fact_coverage_rate": 1.0,
+          "major_claim_corroboration_rate": 1.0,
+          "major_claim_needs_corroboration": 0,
+          "reference_freshness": {
+            "status": "ok",
+            "sample_size": 12,
+            "freshness_score_100_avg": 90.0,
+            "risk_level": "low",
+            "retrieved_coverage_rate": 0.9,
+            "stale_retrieved_rate": 0.0
+          }
+        }
+      },
+      "copyedit_report": {
+        "summary": {
+          "chronology_conflict_count": 0,
+          "repeated_paragraph_count": 0,
+          "grammar_flag_count": 0,
+          "spelling_flag_count": 0,
+          "name_inconsistency_count": 0
+        }
+      },
+      "rights_risk_report": {
+        "quote_policy_violations": [],
+        "source_summary": {
+          "unknown_source_tier_count": 0
+        }
+      },
+      "plagiarism_report": {
+        "summary": {
+          "duplicate_sentence_pair_count": 0,
+          "source_overlap_flag_count": 0
+        }
+      },
+      "perspective_bias_report": {
+        "coverage_status": "broad",
+        "warnings": []
+      },
+      "publication_compliance_report": {
+        "summary": {
+          "critical_failure_count": 0
+        }
+      },
+      "expect": {
+        "gate_passed": true,
+        "min_overall_score_100": 90.0
+      }
+    },
+    {
+      "id": "quality_failure_case",
+      "gate_result": {
+        "passed": false,
+        "unsupported_total": 6
+      },
+      "verification_report": {
+        "dead_links": [
+          {
+            "url": "https://example.com/dead"
+          }
+        ],
+        "restricted_links": [],
+        "non_authoritative_domains": [
+          {
+            "domain": "randomblog.example"
+          }
+        ],
+        "duplicate_references": [],
+        "missing_registry_entries": []
+      },
+      "retrieval_report": {
+        "aggregate": {
+          "sentence_coverage_rate": 0.72,
+          "fact_coverage_rate": 0.7,
+          "major_claim_corroboration_rate": 0.6,
+          "major_claim_needs_corroboration": 5,
+          "reference_freshness": {
+            "status": "ok",
+            "sample_size": 20,
+            "freshness_score_100_avg": 35.0,
+            "risk_level": "high",
+            "retrieved_coverage_rate": 0.25,
+            "stale_retrieved_rate": 0.7
+          }
+        }
+      },
+      "copyedit_report": {
+        "summary": {
+          "chronology_conflict_count": 2,
+          "repeated_paragraph_count": 2,
+          "grammar_flag_count": 3,
+          "spelling_flag_count": 2,
+          "name_inconsistency_count": 1
+        }
+      },
+      "rights_risk_report": {
+        "quote_policy_violations": [
+          {
+            "chapter_title": "Sample"
+          }
+        ],
+        "source_summary": {
+          "unknown_source_tier_count": 4
+        }
+      },
+      "plagiarism_report": {
+        "summary": {
+          "duplicate_sentence_pair_count": 3,
+          "source_overlap_flag_count": 2
+        }
+      },
+      "perspective_bias_report": {
+        "coverage_status": "narrow",
+        "warnings": [
+          "limited perspective breadth"
+        ]
+      },
+      "publication_compliance_report": {
+        "summary": {
+          "critical_failure_count": 2
+        }
+      },
+      "expect": {
+        "gate_passed": false,
+        "min_overall_score_100": 35.0
+      }
+    }
+  ]
+}

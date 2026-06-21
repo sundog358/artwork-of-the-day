@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "source": "Ported from non-fiction-book-maker/us_history_alignment_benchmark.json (AW-008 slice 3).",
+  "description": "Held-out sentence-to-evidence alignment benchmark. Each case pairs a manuscript sentence with a candidate source chunk and labels whether the chunk lexically supports the sentence. Used to calibrate the lexical-overlap floors in lib/support-span-alignment.ts.",
+  "reference_profile_thresholds": { "draft": 0.30, "research": 0.34, "publication": 0.38 },
+  "cases": [
+    { "id": "revolution_independence_pos_easy", "alignment_type": "exact_match", "supports_sentence": true, "sentence": "The Declaration of Independence was adopted in 1776.", "source_chunk": "Congress adopted the Declaration of Independence on July 4, 1776, in Philadelphia." },
+    { "id": "civilwar_end_pos_easy", "alignment_type": "exact_match", "supports_sentence": true, "sentence": "The American Civil War ended in 1865.", "source_chunk": "Hostilities of the American Civil War concluded in 1865 when Confederate forces surrendered at Appomattox." },
+    { "id": "space_apollo_pos_paraphrase", "alignment_type": "paraphrase", "supports_sentence": true, "sentence": "Apollo 11 landed astronauts on the Moon in 1969.", "source_chunk": "On July 20, 1969, Apollo 11 successfully placed two astronauts on the lunar surface." },
+    { "id": "earlyrepublic_billofrights_pos", "alignment_type": "exact_match", "supports_sentence": true, "sentence": "The Bill of Rights was ratified in 1791.", "source_chunk": "The first ten amendments, known as the Bill of Rights, were ratified by the states in 1791." },
+    { "id": "coldwar_marshall_pos_paraphrase", "alignment_type": "paraphrase", "supports_sentence": true, "sentence": "The Marshall Plan provided economic aid to Europe.", "source_chunk": "Marshall Plan disbursed economic assistance to European nations recovering from the war." },
+    { "id": "newdeal_fdr_pos_heavy_paraphrase", "alignment_type": "paraphrase", "supports_sentence": true, "sentence": "Franklin Roosevelt launched the New Deal in 1933.", "source_chunk": "Beginning in 1933, President Roosevelt rolled out a sweeping set of New Deal programs aimed at recovery." },
+    { "id": "revolution_unrelated_neg_easy", "alignment_type": "off_topic", "supports_sentence": false, "sentence": "The Declaration of Independence was adopted in 1776.", "source_chunk": "Julius Caesar was assassinated on the Ides of March in 44 BC by a group of Roman senators." },
+    { "id": "progressive_unrelated_neg_easy", "alignment_type": "off_topic", "supports_sentence": false, "sentence": "The Nineteenth Amendment granted women the right to vote.", "source_chunk": "The Apollo program required massive funding from the federal government during the 1960s." },
+    { "id": "modern_unrelated_neg_easy", "alignment_type": "off_topic", "supports_sentence": false, "sentence": "Abraham Lincoln was the sixteenth president of the United States.", "source_chunk": "The Hoover Dam was completed during the Great Depression in 1936 along the Colorado River." },
+    { "id": "coldwar_vietnam_vs_korea_neg_moderate", "alignment_type": "wrong_event", "supports_sentence": false, "sentence": "The Vietnam War lasted nearly two decades.", "source_chunk": "The Korean War concluded with an armistice in 1953 after three years of fighting." },
+    { "id": "wwi_versailles_vs_paris_neg_hard", "alignment_type": "wrong_event", "supports_sentence": false, "sentence": "The Treaty of Versailles formally ended World War I.", "source_chunk": "The Treaty of Paris in 1783 ended the American Revolutionary War with British recognition of independence." },
+    { "id": "earlyrepublic_constitution_year_neg_hard", "alignment_type": "same_entity_wrong_fact", "supports_sentence": false, "sentence": "The U.S. Constitution was ratified in 1788.", "source_chunk": "The U.S. Constitution was drafted at the Philadelphia Convention in 1787 before going to the states for ratification." }
+  ]
+}

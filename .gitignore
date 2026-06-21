@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / tooling — keep project-scoped skills, ignore machine-specific config
+.claude/*
+!.claude/skills/
+.vscode/
+.idea/
+
+# Secrets / local env — never commit API keys
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db

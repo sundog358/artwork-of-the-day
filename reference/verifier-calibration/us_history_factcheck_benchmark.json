@@ -1,0 +1,310 @@
+{
+  "version": "2.0",
+  "description": "Held-out U.S. history fact-check benchmark for calibrating relevance + entailment thresholds. Each case carries era/claim_type/difficulty metadata so the benchmark is reviewable and extensible. Every claim is sourced from widely cited U.S. history references; review_notes describe the rationale for the label.",
+  "search_space": {
+    "relevance_thresholds": [0.18, 0.22, 0.24, 0.26, 0.28, 0.32],
+    "entailment_thresholds": [38.0, 42.0, 45.0, 48.0, 52.0, 56.0]
+  },
+  "cases": [
+    {
+      "id": "fc_colonial_mayflower_year_pos",
+      "era": "Colonial",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Mayflower arrived at Plymouth in 1620.",
+      "statement": "Mayflower voyage arrival year: 1620; landing site Plymouth.",
+      "supports_claim": true,
+      "review_notes": "Statement gives the same arrival year and location as the claim."
+    },
+    {
+      "id": "fc_colonial_mayflower_year_neg",
+      "era": "Colonial",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Mayflower arrived at Plymouth in 1620.",
+      "statement": "Mayflower voyage arrival year: 1602.",
+      "supports_claim": false,
+      "review_notes": "Same event but the year is transposed; lexical overlap is high so this is a useful trap for the heuristic."
+    },
+    {
+      "id": "fc_revolution_independence_year_pos",
+      "era": "Revolution",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The United States Declaration of Independence was adopted in 1776.",
+      "statement": "Declaration of Independence adoption date: July 4, 1776.",
+      "supports_claim": true,
+      "review_notes": "Direct match on entity and year."
+    },
+    {
+      "id": "fc_revolution_independence_year_neg",
+      "era": "Revolution",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The United States Declaration of Independence was adopted in 1776.",
+      "statement": "Declaration of Independence was adopted in 1789 alongside the Bill of Rights.",
+      "supports_claim": false,
+      "review_notes": "Confuses adoption with later constitutional events; year mismatch."
+    },
+    {
+      "id": "fc_revolution_constitution_year_pos",
+      "era": "Revolution",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The U.S. Constitution was ratified in 1788.",
+      "statement": "Constitution of the United States ratification year: 1788 (New Hampshire ninth state).",
+      "supports_claim": true,
+      "review_notes": "Standard ratification year confirmed by ninth-state milestone."
+    },
+    {
+      "id": "fc_revolution_constitution_year_neg",
+      "era": "Revolution",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The U.S. Constitution was ratified in 1788.",
+      "statement": "U.S. Constitution was drafted in 1776 at the Continental Congress.",
+      "supports_claim": false,
+      "review_notes": "Wrong year and conflates Declaration-era drafting with Constitutional Convention."
+    },
+    {
+      "id": "fc_earlyrepublic_louisiana_year_pos",
+      "era": "Early Republic",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Louisiana Purchase occurred in 1803.",
+      "statement": "Louisiana Purchase signing year: 1803; territory acquired from France.",
+      "supports_claim": true,
+      "review_notes": "Year and counterparty both align with claim."
+    },
+    {
+      "id": "fc_earlyrepublic_louisiana_year_neg",
+      "era": "Early Republic",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Louisiana Purchase occurred in 1803.",
+      "statement": "Louisiana Purchase took place in 1903.",
+      "supports_claim": false,
+      "review_notes": "Wrong century; same entity."
+    },
+    {
+      "id": "fc_jacksonian_indianremoval_year_pos",
+      "era": "Jacksonian",
+      "claim_type": "legislation",
+      "difficulty": "moderate",
+      "claim": "The Indian Removal Act became law in 1830.",
+      "statement": "Indian Removal Act enactment year: 1830 under President Andrew Jackson.",
+      "supports_claim": true,
+      "review_notes": "Year plus executive context corroborate."
+    },
+    {
+      "id": "fc_civilwar_dates_pos",
+      "era": "Civil War",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The U.S. Civil War ended in 1865.",
+      "statement": "American Civil War end time: 1865.",
+      "supports_claim": true,
+      "review_notes": "Standard textbook end date."
+    },
+    {
+      "id": "fc_civilwar_dates_neg_startswapped",
+      "era": "Civil War",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The U.S. Civil War ended in 1865.",
+      "statement": "American Civil War start time: 1861.",
+      "supports_claim": false,
+      "review_notes": "Right war, wrong endpoint of the date range."
+    },
+    {
+      "id": "fc_civilwar_emancipation_pos",
+      "era": "Civil War",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Emancipation Proclamation was issued in 1863.",
+      "statement": "Emancipation Proclamation issuance date: January 1, 1863.",
+      "supports_claim": true,
+      "review_notes": "Exact issuance date supports the year-level claim."
+    },
+    {
+      "id": "fc_civilwar_emancipation_neg",
+      "era": "Civil War",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The Emancipation Proclamation was issued in 1863.",
+      "statement": "Emancipation Proclamation was issued in 1963.",
+      "supports_claim": false,
+      "review_notes": "Year typo trap."
+    },
+    {
+      "id": "fc_reconstruction_13thamendment_pos",
+      "era": "Reconstruction",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The Thirteenth Amendment abolished slavery in 1865.",
+      "statement": "Thirteenth Amendment to the United States Constitution ratification date: December 1865; effect: abolition of slavery and involuntary servitude.",
+      "supports_claim": true,
+      "review_notes": "Both effect and year align with claim."
+    },
+    {
+      "id": "fc_reconstruction_13thamendment_neg",
+      "era": "Reconstruction",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The Thirteenth Amendment abolished slavery in 1865.",
+      "statement": "Thirteenth Amendment guaranteed women's voting rights.",
+      "supports_claim": false,
+      "review_notes": "Wrong amendment effect; the Nineteenth Amendment did that."
+    },
+    {
+      "id": "fc_progressive_19thamendment_pos",
+      "era": "Progressive",
+      "claim_type": "legislation",
+      "difficulty": "easy",
+      "claim": "The 19th Amendment was ratified in 1920.",
+      "statement": "Nineteenth Amendment to the United States Constitution ratification date: 1920.",
+      "supports_claim": true,
+      "review_notes": "Direct match."
+    },
+    {
+      "id": "fc_progressive_19thamendment_neg",
+      "era": "Progressive",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The 19th Amendment was ratified in 1920.",
+      "statement": "Nineteenth Amendment introduced federal income taxation.",
+      "supports_claim": false,
+      "review_notes": "Confuses with Sixteenth Amendment; same numeric era but different scope."
+    },
+    {
+      "id": "fc_newdeal_period_pos",
+      "era": "New Deal",
+      "claim_type": "date",
+      "difficulty": "easy",
+      "claim": "The New Deal began in the 1930s.",
+      "statement": "New Deal period: 1933 to 1939.",
+      "supports_claim": true,
+      "review_notes": "Date range falls inside the 1930s decade."
+    },
+    {
+      "id": "fc_newdeal_period_neg",
+      "era": "New Deal",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The New Deal began in the 1930s.",
+      "statement": "The New Deal was a foreign policy treaty signed in 1945.",
+      "supports_claim": false,
+      "review_notes": "Wrong scope (foreign-policy treaty) and wrong era."
+    },
+    {
+      "id": "fc_wwii_pearlharbor_pos",
+      "era": "World War II",
+      "claim_type": "cause_effect",
+      "difficulty": "easy",
+      "claim": "The U.S. entered World War II after Pearl Harbor in 1941.",
+      "statement": "Attack on Pearl Harbor date: 1941; U.S. declaration of war followed.",
+      "supports_claim": true,
+      "review_notes": "Causal chain (attack -> declaration) aligns with claim."
+    },
+    {
+      "id": "fc_wwii_pearlharbor_neg",
+      "era": "World War II",
+      "claim_type": "cause_effect",
+      "difficulty": "easy",
+      "claim": "The U.S. entered World War II after Pearl Harbor in 1941.",
+      "statement": "Pearl Harbor was attacked in 1914.",
+      "supports_claim": false,
+      "review_notes": "Wrong decade for the attack."
+    },
+    {
+      "id": "fc_coldwar_marshall_year_pos",
+      "era": "Cold War",
+      "claim_type": "legislation",
+      "difficulty": "moderate",
+      "claim": "The Marshall Plan was signed into law in 1948.",
+      "statement": "Marshall Plan (Economic Recovery Act) enactment date: April 1948.",
+      "supports_claim": true,
+      "review_notes": "Confirmed by formal program name and enactment month."
+    },
+    {
+      "id": "fc_coldwar_marshall_year_neg",
+      "era": "Cold War",
+      "claim_type": "legislation",
+      "difficulty": "moderate",
+      "claim": "The Marshall Plan was signed into law in 1948.",
+      "statement": "Marshall Plan was an executive directive enacted in 1968.",
+      "supports_claim": false,
+      "review_notes": "Wrong enactment vehicle and wrong year."
+    },
+    {
+      "id": "fc_civilrights_voting_act_pos",
+      "era": "Civil Rights",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The Voting Rights Act of 1965 outlawed discriminatory voting practices.",
+      "statement": "Voting Rights Act of 1965 enactment year: 1965; scope: federal prohibition on race-based voting discrimination.",
+      "supports_claim": true,
+      "review_notes": "Same year and same scope language."
+    },
+    {
+      "id": "fc_civilrights_voting_act_neg",
+      "era": "Civil Rights",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The Voting Rights Act of 1965 outlawed discriminatory voting practices.",
+      "statement": "Voting Rights Act of 1965 created the Social Security Administration.",
+      "supports_claim": false,
+      "review_notes": "Wrong scope; SSA was created by the 1935 Social Security Act."
+    },
+    {
+      "id": "fc_modern_apollo_landing_pos",
+      "era": "Space Age",
+      "claim_type": "event",
+      "difficulty": "easy",
+      "claim": "Apollo 11 landed astronauts on the Moon in 1969.",
+      "statement": "Apollo 11 Moon landing date: July 20, 1969.",
+      "supports_claim": true,
+      "review_notes": "Direct match on year and event."
+    },
+    {
+      "id": "fc_modern_apollo_landing_neg",
+      "era": "Space Age",
+      "claim_type": "event",
+      "difficulty": "moderate",
+      "claim": "Apollo 11 landed astronauts on the Moon in 1969.",
+      "statement": "Apollo 11 launched in 1959 and orbited Venus.",
+      "supports_claim": false,
+      "review_notes": "Wrong year and wrong destination."
+    },
+    {
+      "id": "fc_modern_civilrights_act_pos",
+      "era": "Civil Rights",
+      "claim_type": "scope",
+      "difficulty": "moderate",
+      "claim": "The Civil Rights Act of 1964 banned segregation in public accommodations.",
+      "statement": "Civil Rights Act of 1964 scope: prohibits discrimination in public accommodations and employment.",
+      "supports_claim": true,
+      "review_notes": "Statement broadens scope but still entails the claim."
+    },
+    {
+      "id": "fc_modern_nato_founding_pos",
+      "era": "Cold War",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The United States co-founded NATO in 1949.",
+      "statement": "North Atlantic Treaty Organization founding year: 1949; United States among founding members.",
+      "supports_claim": true,
+      "review_notes": "Year and founding membership both align."
+    },
+    {
+      "id": "fc_modern_nato_founding_neg",
+      "era": "Cold War",
+      "claim_type": "date",
+      "difficulty": "moderate",
+      "claim": "The United States co-founded NATO in 1949.",
+      "statement": "NATO was established in 1991 to replace the Warsaw Pact.",
+      "supports_claim": false,
+      "review_notes": "Year wrong and conflates with the end of the Cold War."
+    }
+  ]
+}

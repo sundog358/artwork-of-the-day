@@ -1,0 +1,14 @@
+{
+  "draft": {
+    "relevance_threshold": 0.28,
+    "entailment_threshold": 36.0
+  },
+  "research": {
+    "relevance_threshold": 0.32,
+    "entailment_threshold": 42.0
+  },
+  "publication": {
+    "relevance_threshold": 0.36,
+    "entailment_threshold": 50.0
+  }
+}

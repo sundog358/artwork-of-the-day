@@ -1,0 +1,11 @@
+{
+  "draft": {
+    "lexical_overlap_threshold": 0.3
+  },
+  "research": {
+    "lexical_overlap_threshold": 0.34
+  },
+  "publication": {
+    "lexical_overlap_threshold": 0.38
+  }
+}

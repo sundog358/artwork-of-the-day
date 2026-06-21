@@ -1,0 +1,315 @@
+{
+  "schema_version": "v0.1",
+  "cases": [
+    {
+      "case_id": "publication_gate_pass",
+      "article": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-pass",
+        "idea_id": "idea-fixture-pass",
+        "title": "A Grounded Test Article",
+        "generation_settings": {
+          "schema_version": "v0.1",
+          "article_length": "standard",
+          "citation_style": "chicago",
+          "quality_profile": "publication",
+          "tone_register": "academic"
+        },
+        "markdown": "# A Grounded Test Article\n\n## Introduction\n\nThis introduction states the article's central thesis.\n\n## Body\n\nThe first fixture sentence is grounded in the first source span [S001].\n\nThe second fixture sentence is grounded in the second source span [S002].\n\nThe third fixture sentence is grounded in the third source span [S003].\n\n## Conclusion\n\nThis conclusion summarizes the grounded argument.\n\n## References\n\n- [S001] Fixture Source, chapter 1.\n- [S002] Fixture Source, chapter 2.\n- [S003] Fixture Source, chapter 3.",
+        "citations": [
+          {
+            "schema_version": "v0.1",
+            "citation_id": "S001",
+            "label": "S001",
+            "source_title": "Fixture Source",
+            "source_url": "https://example.test/source",
+            "evidence_span_ids": ["span-001"]
+          },
+          {
+            "schema_version": "v0.1",
+            "citation_id": "S002",
+            "label": "S002",
+            "source_title": "Fixture Source",
+            "source_url": "https://example.test/source",
+            "evidence_span_ids": ["span-002"]
+          },
+          {
+            "schema_version": "v0.1",
+            "citation_id": "S003",
+            "label": "S003",
+            "source_title": "Fixture Source",
+            "source_url": "https://example.test/source",
+            "evidence_span_ids": ["span-003"]
+          }
+        ],
+        "evidence_spans": [
+          {
+            "schema_version": "v0.1",
+            "span_id": "span-001",
+            "citation_id": "S001",
+            "book_id": "fixture-book",
+            "chunk_id": "chunk-001",
+            "section_heading": "Chapter 1",
+            "start_char": 0,
+            "end_char": 60,
+            "text": "The first fixture sentence is grounded in the first source span.",
+            "source_hash": "sha256:fixture"
+          },
+          {
+            "schema_version": "v0.1",
+            "span_id": "span-002",
+            "citation_id": "S002",
+            "book_id": "fixture-book",
+            "chunk_id": "chunk-002",
+            "section_heading": "Chapter 2",
+            "start_char": 61,
+            "end_char": 123,
+            "text": "The second fixture sentence is grounded in the second source span.",
+            "source_hash": "sha256:fixture"
+          },
+          {
+            "schema_version": "v0.1",
+            "span_id": "span-003",
+            "citation_id": "S003",
+            "book_id": "fixture-book",
+            "chunk_id": "chunk-003",
+            "section_heading": "Chapter 3",
+            "start_char": 124,
+            "end_char": 186,
+            "text": "The third fixture sentence is grounded in the third source span.",
+            "source_hash": "sha256:fixture"
+          }
+        ],
+        "verification_summary": {
+          "schema_version": "v0.1",
+          "status": "passed",
+          "citation_coverage": 1,
+          "resolved_citation_count": 3,
+          "unresolved_citation_count": 0,
+          "blocking_issue_count": 0,
+          "warning_count": 0
+        }
+      },
+      "verification_report": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-pass",
+        "profile": "publication",
+        "status": "passed",
+        "citation_coverage": 1,
+        "unsupported_claims": [],
+        "quote_checks": [
+          {
+            "citation_id": "S001",
+            "status": "verified",
+            "similarity": 1
+          },
+          {
+            "citation_id": "S002",
+            "status": "verified",
+            "similarity": 1
+          },
+          {
+            "citation_id": "S003",
+            "status": "verified",
+            "similarity": 1
+          }
+        ],
+        "numeric_date_checks": [
+          {
+            "claim": "No numeric or date claims require verification in this fixture.",
+            "status": "not_applicable",
+            "citation_ids": []
+          }
+        ],
+        "blocking_issues": []
+      },
+      "sentence_audit": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-pass",
+        "selected_idea_id": "idea-fixture-pass",
+        "generated_at": "2026-06-10T00:00:00.000Z",
+        "sentence_count": 3,
+        "cited_sentence_count": 3,
+        "supported_sentence_count": 3,
+        "unresolved_sentence_count": 0,
+        "uncited_claim_count": 0,
+        "sentences": [
+          {
+            "schema_version": "v0.1",
+            "sentence_id": "sentence-pass-001",
+            "section_heading": "Argument",
+            "sentence_index": 0,
+            "text": "The first fixture sentence is grounded in the first source span [S001].",
+            "citation_ids": ["S001"],
+            "evidence_span_ids": ["span-001"],
+            "support_status": "supported",
+            "warning": null
+          },
+          {
+            "schema_version": "v0.1",
+            "sentence_id": "sentence-pass-002",
+            "section_heading": "Argument",
+            "sentence_index": 1,
+            "text": "The second fixture sentence is grounded in the second source span [S002].",
+            "citation_ids": ["S002"],
+            "evidence_span_ids": ["span-002"],
+            "support_status": "supported",
+            "warning": null
+          },
+          {
+            "schema_version": "v0.1",
+            "sentence_id": "sentence-pass-003",
+            "section_heading": "Argument",
+            "sentence_index": 2,
+            "text": "The third fixture sentence is grounded in the third source span [S003].",
+            "citation_ids": ["S003"],
+            "evidence_span_ids": ["span-003"],
+            "support_status": "supported",
+            "warning": null
+          }
+        ]
+      },
+      "expected": {
+        "passed": true,
+        "status": "passed",
+        "min_score": 90,
+        "failure_categories": []
+      }
+    },
+    {
+      "case_id": "publication_gate_fail",
+      "article": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-fail",
+        "idea_id": "idea-fixture-fail",
+        "title": "A Broken Test Article",
+        "generation_settings": {
+          "schema_version": "v0.1",
+          "article_length": "standard",
+          "citation_style": "chicago",
+          "quality_profile": "publication",
+          "tone_register": "academic"
+        },
+        "markdown": "# A Broken Test Article\n\n## Argument\n\nThis fixture makes a broad unsupported claim with no citation.\n\nThis sentence points at a citation marker that has no citation record [S999].",
+        "citations": [
+          {
+            "schema_version": "v0.1",
+            "citation_id": "S001",
+            "label": "S001",
+            "source_title": "Fixture Source",
+            "source_url": "https://example.test/source",
+            "evidence_span_ids": ["span-missing"]
+          }
+        ],
+        "evidence_spans": [
+          {
+            "schema_version": "v0.1",
+            "span_id": "span-001",
+            "citation_id": "S001",
+            "book_id": "fixture-book",
+            "chunk_id": "chunk-001",
+            "section_heading": "Chapter 1",
+            "start_char": 0,
+            "end_char": 61,
+            "text": "The available evidence does not match the broken article citation.",
+            "source_hash": "sha256:fixture"
+          }
+        ],
+        "verification_summary": {
+          "schema_version": "v0.1",
+          "status": "failed",
+          "citation_coverage": 0.5,
+          "resolved_citation_count": 0,
+          "unresolved_citation_count": 1,
+          "blocking_issue_count": 1,
+          "warning_count": 0
+        }
+      },
+      "verification_report": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-fail",
+        "profile": "publication",
+        "status": "failed",
+        "citation_coverage": 0.5,
+        "unsupported_claims": [
+          {
+            "issue_id": "fixture-block-unsupported",
+            "severity": "blocking",
+            "message": "Unsupported claim in fixture.",
+            "citation_id": null
+          }
+        ],
+        "quote_checks": [
+          {
+            "citation_id": "S001",
+            "status": "drift_detected",
+            "similarity": 0.42
+          }
+        ],
+        "numeric_date_checks": [
+          {
+            "claim": "The fixture claims a date that is not confirmed.",
+            "status": "unconfirmed",
+            "citation_ids": ["S001"]
+          }
+        ],
+        "blocking_issues": [
+          {
+            "issue_id": "fixture-block-verification",
+            "severity": "blocking",
+            "message": "Fixture verification failed.",
+            "citation_id": "S001"
+          }
+        ]
+      },
+      "sentence_audit": {
+        "schema_version": "v0.1",
+        "article_id": "article-fixture-fail",
+        "selected_idea_id": "idea-fixture-fail",
+        "generated_at": "2026-06-10T00:00:00.000Z",
+        "sentence_count": 2,
+        "cited_sentence_count": 1,
+        "supported_sentence_count": 0,
+        "unresolved_sentence_count": 1,
+        "uncited_claim_count": 1,
+        "sentences": [
+          {
+            "schema_version": "v0.1",
+            "sentence_id": "sentence-fail-001",
+            "section_heading": "Argument",
+            "sentence_index": 0,
+            "text": "This fixture makes a broad unsupported claim with no citation.",
+            "citation_ids": [],
+            "evidence_span_ids": [],
+            "support_status": "needs_citation",
+            "warning": "Sentence looks claim-like but has no citation marker."
+          },
+          {
+            "schema_version": "v0.1",
+            "sentence_id": "sentence-fail-002",
+            "section_heading": "Argument",
+            "sentence_index": 1,
+            "text": "This sentence points at a citation marker that has no citation record [S999].",
+            "citation_ids": ["S999"],
+            "evidence_span_ids": [],
+            "support_status": "unresolved_citation",
+            "warning": "Unresolved citation marker: S999."
+          }
+        ]
+      },
+      "expected": {
+        "passed": false,
+        "status": "failed",
+        "max_score": 50,
+        "failure_categories": [
+          "provenance_alignment",
+          "citation_integrity",
+          "citation_quality",
+          "quote_attribution",
+          "numeric_date_fact_verification",
+          "publication_compliance"
+        ]
+      }
+    }
+  ]
+}

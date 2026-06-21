@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Artwork of the Day</title>
+    <meta
+      name="description"
+      content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
+    />
+    <link rel="icon" type="image/jpeg" href="/static/8sprocket.jpg" />
+    <!-- Add Bootstrap and FontAwesome like openartbrowser -->
+    <link
+      rel="stylesheet"
+      href="https://bootswatch.com/4/flatly/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://use.fontawesome.com/releases/v5.8.1/css/all.css"
+    />
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background-color: #f8f9fa;
+        overflow: hidden;
+      }
+      .container {
+        max-width: 1400px;
+        height: 100vh;
+        margin: auto;
+        padding: 16px 28px 20px;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+      }
+      #content {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .artwork {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+      .img-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1c1c1c;
+        flex: 0 0 58%;
+        height: 100%;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .artwork-image {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+      }
+      .img-container:hover .artwork-image {
+        transform: scale(1.02);
+      }
+      .enlarge {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 10px;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+      .artwork-info {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        overflow-y: auto;
+        padding: 20px 24px;
+      }
+      .artwork-info p {
+        margin: 5px 0;
+      }
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .artist-section,
+      .artwork-section {
+        background: #f8f9fa;
+        padding: 14px 18px;
+        border-radius: 8px;
+      }
+      .artist-image {
+        max-width: 110px;
+        max-height: 150px;
+        float: right;
+        border-radius: 8px;
+        margin: 0 0 10px 14px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+      .artist-desc {
+        font-style: italic;
+        color: #555;
+        margin-bottom: 12px;
+      }
+      .aotd-about {
+        background: #fbf7ef;
+        border: 1px solid #efe7d6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+      }
+      .aotd-about:empty {
+        display: none;
+      }
+      .aotd-about p {
+        margin: 0 0 8px;
+        line-height: 1.5;
+        color: #3a3a3a;
+      }
+      .aotd-about p:last-child {
+        margin-bottom: 0;
+      }
+      .aotd-headline {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #2c3e50;
+      }
+      .aotd-sec {
+        font-size: 0.92rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7c8c;
+        margin: 12px 0 4px;
+      }
+      .about-tag {
+        font-size: 0.72rem;
+        font-weight: 400;
+        color: #8a949e;
+        margin-left: 6px;
+      }
+      .ai-btn {
+        margin-top: 10px;
+        padding: 6px 14px;
+        font-size: 0.85rem;
+        color: #2c3e50;
+        background: #fff;
+        border: 1px solid #d9cdb4;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .ai-btn:hover:not(:disabled) {
+        background: #f3ead6;
+      }
+      .ai-btn:disabled {
+        cursor: default;
+        opacity: 0.75;
+      }
+      .chip-row {
+        margin: 6px 0;
+      }
+      .wd-chip {
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+        padding: 2px 9px;
+        font-size: 0.82rem;
+        background: #eaf0f6;
+        color: #2c3e50;
+        border: 1px solid #d6e0ea;
+        border-radius: 999px;
+        text-decoration: none;
+        transition: background 0.15s ease;
+      }
+      .wd-chip:hover {
+        background: #d8e6f3;
+        text-decoration: none;
+      }
+      h1 {
+        text-align: center;
+        margin: 0 0 8px;
+        font-size: 1.8rem;
+        color: #2c3e50;
+      }
+      .occasion {
+        text-align: center;
+        margin: 0 auto 12px;
+        max-width: 600px;
+        padding: 8px 20px;
+        background: #eaf4fb;
+        color: #2c3e50;
+        border: 1px solid #d3e6f3;
+        border-radius: 999px;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+      .occasion .occasion-sub {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: #6b7c8c;
+        margin-top: 2px;
+      }
+      h2 {
+        color: #2c3e50;
+        margin: 0 0 12px;
+        font-size: 1.5rem;
+      }
+      h3 {
+        color: #34495e;
+        margin-bottom: 8px;
+        font-size: 1.1rem;
+      }
+      .loading {
+        text-align: center;
+        padding: 50px;
+        font-size: 1.2rem;
+        color: #666;
+      }
+      .error {
+        background: #fee;
+        color: #c00;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .loading-container {
+        text-align: center;
+        padding: 50px;
+        color: #2c3e50;
+      }
+
+      .loading-spinner {
+        display: inline-block;
+        width: 50px;
+        height: 50px;
+        border: 3px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 3px solid #3498db;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      .loading-text {
+        font-size: 1.2rem;
+        margin-top: 15px;
+        color: #34495e;
+      }
+
+      .loading-progress {
+        width: 100%;
+        max-width: 300px;
+        margin: 15px auto;
+        background-color: #eee;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .loading-bar {
+        width: 0%;
+        height: 4px;
+        background-color: #3498db;
+        transition: width 0.3s ease;
+      }
+
+      .loading-status {
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        background: #fee;
+        color: #e74c3c;
+        padding: 30px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .error i {
+        font-size: 2rem;
+        margin-bottom: 15px;
+        display: block;
+      }
+
+      .nav-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 48px;
+        height: 48px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.45);
+        color: #fff;
+        font-size: 1.4rem;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease;
+        z-index: 2;
+      }
+      .nav-arrow:hover {
+        background: rgba(0, 0, 0, 0.78);
+      }
+      .nav-arrow.prev {
+        left: 15px;
+      }
+      .nav-arrow.next {
+        right: 15px;
+      }
+      .loading-spinner.small {
+        width: 26px;
+        height: 26px;
+        border-width: 2px;
+        margin: 10px auto;
+      }
+      .mini-loading {
+        text-align: center;
+        padding: 15px;
+        color: #888;
+      }
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        margin-bottom: 8px;
+      }
+      .site-logo {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .site-footer {
+        flex: 0 0 auto;
+        text-align: center;
+        margin-top: 12px;
+        padding: 12px 16px;
+        background: #122438; /* midnight rain navy */
+        color: #ffffff;
+        border-radius: 8px;
+        font-size: 0.84rem;
+      }
+      .site-footer a {
+        color: #cfe0f2;
+      }
+      .footer-copy {
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .footer-sub {
+        color: #aebfd4;
+        font-size: 0.76rem;
+        margin-top: 3px;
+      }
+
+      /* Narrow screens: stack image over info and allow normal scrolling. */
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+        .container {
+          height: auto;
+          min-height: 100vh;
+        }
+        .artwork {
+          flex-direction: column;
+        }
+        .img-container {
+          flex: none;
+          height: auto;
+          max-height: 55vh;
+        }
+        .artwork-info {
+          height: auto;
+          overflow: visible;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="site-header">
+        <img src="/static/8sprocket.jpg" alt="Sun & Rain Works logo" class="site-logo" />
+        <h1>Artwork of the Day</h1>
+      </header>
+      <div id="occasion" class="occasion" style="display: none"></div>
+      <div id="content">
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">Loading Artwork of the Day</div>
+          <div class="loading-progress">
+            <div class="loading-bar" id="loadingBar"></div>
+          </div>
+          <div class="loading-status" id="loadingStatus">
+            Searching for artists...
+          </div>
+        </div>
+      </div>
+      <footer class="site-footer">
+        <div class="footer-copy">&copy; Sun &amp; Rain Works 2026</div>
+        <div class="footer-sub">
+          Data &amp; images from
+          <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a>
+          &amp;
+          <a href="https://commons.wikimedia.org" target="_blank" rel="noopener"
+            >Wikimedia Commons</a
+          >&nbsp;· image licenses vary.
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      const ICONS = { birthday: "🎂", random: "🗓️" };
+
+      const state = {
+        occasion: "random",
+        today: "",
+        items: [], // [{artwork_id, creator_id, image, birthYear}]
+        index: 0,
+        cache: {}, // artwork_id -> { artwork, artist }
+        articleCache: {}, // "<artwork_id>:sum|gen" -> article payload
+        aiEnabled: false, // is an OpenAI key configured server-side?
+      };
+
+      function esc(s) {
+        return (s == null ? "" : String(s)).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
+      }
+
+      function updateLoadingProgress(progress, status) {
+        const bar = document.getElementById("loadingBar");
+        const statusEl = document.getElementById("loadingStatus");
+        if (bar && statusEl) {
+          bar.style.width = `${progress}%`;
+          statusEl.textContent = status;
+        }
+      }
+
+      function showLoading(message) {
+        const occasionEl = document.getElementById("occasion");
+        if (occasionEl) occasionEl.style.display = "none";
+        document.getElementById("content").innerHTML = `
+          <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading Artwork of the Day</div>
+            <div class="loading-progress">
+              <div class="loading-bar" id="loadingBar"></div>
+            </div>
+            <div class="loading-status" id="loadingStatus">${esc(message)}</div>
+          </div>`;
+      }
+
+      function showError(message) {
+        document.getElementById("content").innerHTML = `
+          <div class="error">
+            <i class="fas fa-exclamation-circle"></i>
+            <div>Error loading artwork:</div>
+            <div style="margin-top: 10px;">${esc(message)}</div>
+            <button onclick="fetchArtwork()" class="btn btn-danger mt-3">
+              <i class="fas fa-redo"></i> Try Again
+            </button>
+          </div>`;
+      }
+
+      // ---- Initial load: fetch the list of the day's artworks ----------------
+      async function fetchArtwork() {
+        try {
+          showLoading("Searching for artwork...");
+          updateLoadingProgress(30, "Searching for artwork...");
+
+          const response = await fetch("/artwork-of-the-day");
+          updateLoadingProgress(60, "Connected to database...");
+          const data = await response.json();
+
+          if (!response.ok || data.status === "error") {
+            throw new Error(data.message || `HTTP error ${response.status}`);
+          }
+
+          state.occasion = data.occasion;
+          state.today = data.today;
+          state.items = data.items || [];
+          state.index = 0;
+          state.cache = {};
+          state.articleCache = {};
+          state.aiEnabled = !!data.aiEnabled;
+
+          if (!state.items.length) throw new Error("No artwork found for today");
+
+          updateLoadingProgress(100, "Complete!");
+          showCurrent();
+        } catch (error) {
+          console.error("Error:", error);
+          showError(error.message);
+        }
+      }
+
+      // ---- Fetch (and cache) details for a single artwork --------------------
+      async function loadDetails(item) {
+        if (state.cache[item.artwork_id]) return state.cache[item.artwork_id];
+        const url =
+          `/artwork-details?artwork=${encodeURIComponent(item.artwork_id)}` +
+          `&artist=${encodeURIComponent(item.creator_id)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || data.status === "error") {
+          throw new Error(data.message || "Could not load details");
+        }
+        state.cache[item.artwork_id] = data;
+        return data;
+      }
+
+      // ---- Article: Wikidata fact summary by default; OpenAI only on request --
+      async function fetchArticle(item, generate) {
+        const ck = item.artwork_id + (generate ? ":gen" : ":sum");
+        if (state.articleCache[ck]) return state.articleCache[ck];
+        const url =
+          `/artwork-article?artwork=${encodeURIComponent(item.artwork_id)}` +
+          `&artist=${encodeURIComponent(item.creator_id)}` +
+          (generate ? "&generate=1" : "");
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || data.status === "error") throw new Error(data.message || "no article");
+        state.articleCache[ck] = data;
+        return data;
+      }
+
+      async function loadArticle(item) {
+        const el = document.getElementById("aotd-about");
+        if (!el) return;
+        // Auto-write the full article when a key is configured; otherwise show the
+        // Wikidata fact summary. Either way the result is cached per artwork, so
+        // each piece is written at most once.
+        const useAI = state.aiEnabled;
+        el.innerHTML =
+          `<div class="mini-loading"><div class="loading-spinner small"></div>` +
+          (useAI ? "Writing the article…" : "Summarizing from Wikidata…") +
+          `</div>`;
+        try {
+          const data = await fetchArticle(item, useAI);
+          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          renderArticle(item, data.article);
+        } catch (e) {
+          el.innerHTML = ""; // article is a nice-to-have; stay quiet on failure
+        }
+      }
+
+      async function generateArticle(item) {
+        const btn = document.getElementById("aotd-ai-btn");
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML =
+            `<span class="loading-spinner small" style="display:inline-block;width:13px;height:13px;border-width:2px;margin:0 6px 0 0;vertical-align:-2px;"></span>Writing…`;
+        }
+        try {
+          const data = await fetchArticle(item, true); // explicit OpenAI call
+          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          renderArticle(item, data.article);
+        } catch (e) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "✨ Write an AI version (retry)";
+          }
+        }
+      }
+
+      function renderArticle(item, article) {
+        const el = document.getElementById("aotd-about");
+        // Prefer sectioned format; fall back to a flat paragraphs payload (older
+        // cached responses) so a format change never renders blank.
+        const sections =
+          (article && article.sections) ||
+          (article && article.paragraphs ? [{ heading: "", paragraphs: article.paragraphs }] : []);
+        if (!el || !sections.length) {
+          if (el) el.innerHTML = "";
+          return;
+        }
+        const generated = article.mode === "generated";
+        const tag = generated
+          ? `<span class="about-tag" title="Written by an AI model, grounded only in verified Wikidata facts">✨ AI-written · fact-checked</span>`
+          : `<span class="about-tag" title="Assembled directly from Wikidata — no AI used">📋 From Wikidata</span>`;
+        const headline =
+          generated && article.title ? `<p class="aotd-headline">${esc(article.title)}</p>` : "";
+        const body = sections
+          .map((s) => {
+            const h = s.heading ? `<h4 class="aotd-sec">${esc(s.heading)}</h4>` : "";
+            const paras = (s.paragraphs || []).map((p) => `<p>${esc(p)}</p>`).join("");
+            return h + paras;
+          })
+          .join("");
+        // Opt-in AI button: only when a key is configured and we're showing the
+        // plain Wikidata summary (so OpenAI is used sparingly, on demand).
+        const button =
+          !generated && state.aiEnabled
+            ? `<button class="ai-btn" id="aotd-ai-btn">✨ Write the full article</button>`
+            : "";
+        el.innerHTML = `<h3><i class="fas fa-feather"></i> About ${tag}</h3>${headline}${body}${button}`;
+        const btn = document.getElementById("aotd-ai-btn");
+        if (btn) btn.addEventListener("click", () => generateArticle(item));
+      }
+
+      function prefetchNext() {
+        if (state.items.length < 2) return;
+        const next = state.items[(state.index + 1) % state.items.length];
+        if (!state.cache[next.artwork_id]) loadDetails(next).catch(() => {});
+      }
+
+      function navigate(delta) {
+        const n = state.items.length;
+        if (!n) return;
+        state.index = (state.index + delta + n) % n;
+        showCurrent();
+      }
+
+      // ---- Render the current artwork ---------------------------------------
+      async function showCurrent() {
+        const item = state.items[state.index];
+        const multi = state.items.length > 1;
+
+        document.getElementById("content").innerHTML = `
+          <div class="artwork">
+            <div class="img-container">
+              <img src="${esc(item.image)}" class="artwork-image" alt="Artwork"/>
+              ${
+                multi
+                  ? `<button class="nav-arrow prev" aria-label="Previous artwork">&#10094;</button>
+                     <button class="nav-arrow next" aria-label="Next artwork">&#10095;</button>`
+                  : ""
+              }
+              <div class="enlarge"><i class="fas fa-expand"></i></div>
+            </div>
+            <div class="artwork-info">
+              <h2 id="aotd-title">Loading…</h2>
+              <div class="aotd-about" id="aotd-about"></div>
+              <div class="info-grid">
+                <div class="artist-section" id="aotd-artist">
+                  <div class="mini-loading"><div class="loading-spinner small"></div>Loading artist…</div>
+                </div>
+                <div class="artwork-section" id="aotd-artwork">
+                  <div class="mini-loading"><div class="loading-spinner small"></div>Loading details…</div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+
+        const imgC = document.querySelector(".img-container");
+        if (imgC) imgC.addEventListener("click", () => window.open(item.image, "_blank"));
+        const prev = document.querySelector(".nav-arrow.prev");
+        const next = document.querySelector(".nav-arrow.next");
+        if (prev)
+          prev.addEventListener("click", (e) => {
+            e.stopPropagation();
+            navigate(-1);
+          });
+        if (next)
+          next.addEventListener("click", (e) => {
+            e.stopPropagation();
+            navigate(1);
+          });
+
+        updateBanner(item, null);
+
+        loadArticle(item);
+
+        try {
+          const details = await loadDetails(item);
+          // Guard against a fast click changing the index mid-fetch.
+          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          fillDetails(details);
+          updateBanner(item, details.artist);
+          prefetchNext();
+        } catch (e) {
+          const el = document.getElementById("aotd-artwork");
+          if (el)
+            el.innerHTML = `<div class="mini-loading">Couldn't load details${
+              state.items.length > 1 ? " — try the arrows for another." : "."
+            }</div>`;
+          document.getElementById("aotd-artist").innerHTML = "";
+          document.getElementById("aotd-title").textContent = "Details unavailable";
+        }
+      }
+
+      function fillDetails(details) {
+        const artwork = details.artwork || {};
+        const artist = details.artist || {};
+        document.getElementById("aotd-title").textContent = artwork.title || "Untitled";
+        document.getElementById("aotd-artist").innerHTML = artistSectionHTML(artist);
+        document.getElementById("aotd-artwork").innerHTML = artworkSectionHTML(artwork);
+      }
+
+      function updateBanner(item, artist) {
+        const el = document.getElementById("occasion");
+        if (!el) return;
+        const icon = ICONS[state.occasion] || "🗓️";
+        let text;
+        if (state.occasion === "birthday") {
+          const name = artist && artist.name ? ` — ${artist.name}` : "";
+          text = "Born on this day" + name + (item.birthYear ? ` (${item.birthYear})` : "");
+        } else {
+          text = `Today's pick for ${state.today}`;
+        }
+        const counter =
+          state.items.length > 1
+            ? ` &middot; ${state.index + 1} of ${state.items.length}`
+            : "";
+        el.innerHTML = `${icon} ${esc(text)}
+          <span class="occasion-sub">${esc(state.today)}${counter}</span>`;
+        el.style.display = "block";
+      }
+
+      // Related-entity chips that link out to Wikidata (Phase 2 depth).
+      function chipRow(label, items) {
+        if (!items || !items.length) return "";
+        const chips = items
+          .map(
+            (e) =>
+              `<a class="wd-chip" href="https://www.wikidata.org/wiki/${esc(e.qid)}" target="_blank" rel="noopener">${esc(e.label)}</a>`
+          )
+          .join("");
+        return `<p class="chip-row"><strong>${label}:</strong> ${chips}</p>`;
+      }
+
+      function artistSectionHTML(artist) {
+        const row = (label, value) =>
+          value ? `<p><strong>${label}:</strong> ${esc(value)}</p>` : "";
+        const born =
+          (artist.birthdate || "") +
+          (artist.birthplace ? ` &middot; ${esc(artist.birthplace)}` : "");
+        const died = artist.deathdate
+          ? `<p><strong>Died:</strong> ${esc(artist.deathdate)}${
+              artist.deathplace ? ` &middot; ${esc(artist.deathplace)}` : ""
+            }</p>`
+          : "";
+        return `
+          <h3><i class="fas fa-user-circle"></i> Artist Information</h3>
+          <p><strong>Name:</strong> ${esc(artist.name || "Unknown")}</p>
+          ${artist.description ? `<p class="artist-desc">${esc(artist.description)}</p>` : ""}
+          ${
+            artist.image
+              ? `<img src="${esc(artist.image)}" alt="${esc(artist.name)}" class="artist-image"/>`
+              : ""
+          }
+          ${artist.birthdate ? `<p><strong>Born:</strong> ${born}</p>` : ""}
+          ${died}
+          ${row("Nationality", artist.nationality)}
+          ${row("Art Movement", artist.movement)}
+          ${row("Occupation", artist.occupation)}
+          ${row("Teachers", artist.teachers)}
+          ${row("Notable Students", artist.students)}
+          ${row("Notable Works", artist.notableWorks)}
+          ${chipRow("Influenced by", artist.influencedBy)}
+          ${chipRow("Contemporaries", artist.contemporaries)}
+          ${
+            artist.wikipedia
+              ? `<p><a href="${esc(artist.wikipedia)}" target="_blank" rel="noopener">
+                   <i class="fab fa-wikipedia-w"></i> Read on Wikipedia</a></p>`
+              : ""
+          }`;
+      }
+
+      function artworkSectionHTML(artwork) {
+        const row = (label, value) =>
+          value ? `<p><strong>${label}:</strong> ${esc(value)}</p>` : "";
+        return `
+          <h3><i class="fas fa-palette"></i> Artwork Details</h3>
+          ${row("Creation Date", artwork.creationDate)}
+          ${row("Medium", artwork.medium)}
+          ${chipRow("Depicts", artwork.depicts)}
+          ${row("Current Location", artwork.location)}
+          ${chipRow("In collection", artwork.collection)}
+          ${row("Dimensions", artwork.dimensions)}
+          ${row("Genre", artwork.genre)}`;
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (!state.items.length) return;
+        if (e.key === "ArrowLeft") navigate(-1);
+        else if (e.key === "ArrowRight") navigate(1);
+      });
+
+      document.addEventListener("DOMContentLoaded", fetchArtwork);
+    </script>
+
+    <!-- Add Bootstrap JS dependencies -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+  </body>
+</html>

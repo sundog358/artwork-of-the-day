@@ -1,0 +1,30 @@
+{
+  "alignment_min_lexical_overlap": 0.08,
+  "alignment_min_cosine": 0.62,
+  "max_alignment_snippets_per_citation": 6,
+  "min_sentence_tokens_for_major_claim": 8,
+  "detect_years_as_major_claim_signal": true,
+  "major_claim_year_regex": "\\b(1[5-9]\\d{2}|20\\d{2})\\b",
+  "major_claim_keywords": [
+    "war",
+    "battle",
+    "treaty",
+    "constitution",
+    "amendment",
+    "independence",
+    "reconstruction",
+    "depression",
+    "revolution",
+    "civil rights",
+    "slavery",
+    "emancipation",
+    "election",
+    "supreme court",
+    "act",
+    "federal",
+    "president",
+    "congress"
+  ],
+  "require_two_independent_sources_for_major_claims": true,
+  "min_independent_sources_for_major_claim": 2
+}
