@@ -288,6 +288,51 @@ def group_facts(group_qid):
     }
 
 
+def enrich_entities(qids):
+    """Second-hop enrichment: one batched 'tell me about these' query.
+
+    For the named entities an article will mention (depicted people, the art
+    movement, the holding museum, influences, peers), fetch a compact fact —
+    a one-line description plus life dates — so the prose can say *who/what*
+    each thing is, not just name it. One round-trip, no model cost. Birth/death
+    are SAMPLEd to a single value to avoid row blow-up; the label service
+    auto-fills ?eLabel/?eDescription (entities lacking a description stay in).
+
+    Returns {qid: {"label", "description", "birth", "death"}}.
+    """
+    valid = [q for q in dict.fromkeys(qids) if QID_RE.match(q)]
+    out = {}
+    if not valid:
+        return out
+    values = " ".join(f"wd:{q}" for q in valid)
+    query = """
+    SELECT ?e ?eLabel ?eDescription (SAMPLE(?birth) AS ?b) (SAMPLE(?death) AS ?d) WHERE {
+      VALUES ?e { %s }
+      OPTIONAL { ?e wdt:P569 ?birth. }
+      OPTIONAL { ?e wdt:P570 ?death. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?e ?eLabel ?eDescription
+    """ % values
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"enrich_entities error: {e}")
+        return out
+    for r in rows:
+        q = qid(_v(r, "e"))
+        label = _v(r, "eLabel")
+        if not q or (label and QID_RE.match(label)):
+            continue
+        out[q] = {
+            "label": label,
+            "description": _v(r, "eDescription"),
+            "birth": _v(r, "b"),
+            "death": _v(r, "d"),
+        }
+    return out
+
+
 def classify_entities(qids):
     """Map each QID to a CIDOC-CRM class for Linked Art references.
 

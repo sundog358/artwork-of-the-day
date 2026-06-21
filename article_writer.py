@@ -91,8 +91,14 @@ def _labels(items, limit=8):
     return ", ".join(d.get("label", "") for d in (items or [])[:limit] if d.get("label"))
 
 
-def build_fact_packet(artwork, artist):
-    """Turn the artwork + artist detail dicts into [{id, label, text}] facts."""
+def build_fact_packet(artwork, artist, extra=None):
+    """Turn the artwork + artist detail dicts into [{id, label, text}] facts.
+
+    `extra` is an optional list of (label, text) pairs appended after the core
+    facts — used for the second-hop entity enrichment (see _enrichment_facts),
+    so background on depicted people, the movement, the museum, etc. becomes
+    citable, grounded material.
+    """
     facts = []
 
     def add(label, value):
@@ -136,6 +142,56 @@ def build_fact_packet(artwork, artist):
     add("Notable works", artist.get("notableWorks"))
     add("Influenced by", _labels(artist.get("influencedBy"), 6))
     add("Contemporaries", _labels(artist.get("contemporaries"), 6))
+
+    for label, text in (extra or []):
+        add(label, text)
+    return facts
+
+
+def _enrichment_facts(artwork, artist):
+    """Deterministic second hop: a compact 'About <X>' fact for each NAMED entity
+    the article is likely to mention. We pull candidates from the dossier lists
+    that carry QIDs (depicted subjects, influences, the movement, the museum,
+    peers), keep only named entities (skips generic concepts like 'sky'), cap the
+    set, and enrich them all in ONE batched SPARQL query. No model cost.
+    """
+    import sparql_library
+
+    pool = []
+    pool += artwork.get("depicts") or []
+    pool += artist.get("influencedBy") or []
+    pool += artwork.get("movementLinks") or []
+    pool += artwork.get("collection") or []
+    pool += artist.get("contemporaries") or []
+
+    seen, picks = set(), []
+    for e in pool:
+        q, label = e.get("qid"), (e.get("label") or "")
+        if not q or q in seen:
+            continue
+        if len(label) < 3 or not any(c.isupper() for c in label):
+            continue  # named entities only — people/places/movements/institutions
+        seen.add(q)
+        picks.append((q, label))
+        if len(picks) >= 8:  # bound packet size, latency, and prompt focus
+            break
+    if not picks:
+        return []
+
+    info = sparql_library.enrich_entities([q for q, _ in picks])
+    facts = []
+    for q, label in picks:
+        d = info.get(q)
+        if not d:
+            continue
+        desc = (d.get("description") or "").strip()
+        by, dy = (d.get("birth") or "")[:4], (d.get("death") or "")[:4]
+        years = ""
+        if by.isdigit() and by not in desc:  # don't duplicate dates already in the desc
+            years = f" ({by}–{dy})" if dy.isdigit() else f" (b. {by})"
+        text = (desc + years).strip()
+        if text:
+            facts.append((f"About {label}", text))
     return facts
 
 
@@ -146,10 +202,22 @@ def build(artwork, artist, generate=False):
     is the deterministic Wikidata fact summary — no model call — so normal
     browsing costs nothing and leans entirely on Wikidata/SPARQL data.
     """
-    facts = build_fact_packet(artwork, artist)
     title = _clean(artwork.get("title")) or "This artwork"
     # Proper-noun entities (label → QID) for linking mentions in the prose.
     entities = artwork.get("_link_entities", [])
+
+    if generate and openai_key():
+        # Second hop only when we're actually generating: enrich the named
+        # entities with one batched SPARQL query so the prose has real
+        # background to ground on (who Lisa del Giocondo was, what Florence is…).
+        try:
+            extra = _enrichment_facts(artwork, artist)
+        except Exception as e:
+            print(f"[article] enrichment skipped: {e}")
+            extra = []
+        facts = build_fact_packet(artwork, artist, extra=extra)
+    else:
+        facts = build_fact_packet(artwork, artist)
 
     if generate and openai_key() and facts:
         try:

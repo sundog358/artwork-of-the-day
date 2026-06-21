@@ -406,6 +406,16 @@ The dossier (now ~24 facts) drives [article_writer.py](article_writer.py):
 - **Fallback** → a deterministic 2-section summary ("The work" / "The artist").
 - Panel gains rows for teachers/students and chips for contemporaries.
 
+**Second-hop enrichment** (article generation only). Before generating, we take
+the *named* entities the dossier already knows (depicted people, the art
+movement, the holding museum, influences, peers — the ones carrying QIDs) and run
+**one batched SPARQL query** (`enrich_entities`) for a compact "About <X>" fact
+each: a one-line description plus life dates. Those become extra citable facts
+(~24 → ~32), so the prose can say *who Lisa del Giocondo was* and *what the
+Italian Renaissance is*, not just name them — still 100% grounded, still a single
+OpenAI call. Selection is deterministic (named entities only, capped at 8), gated
+to `generate=True` so default browsing adds no query, and cached for the day.
+
 **Next phases** — Wikipedia links on chips; source references (`P854`) under the
 article; per-artwork "angle" selection for variety.
 
