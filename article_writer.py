@@ -148,6 +148,8 @@ def build(artwork, artist, generate=False):
     """
     facts = build_fact_packet(artwork, artist)
     title = _clean(artwork.get("title")) or "This artwork"
+    # Proper-noun entities (label → QID) for linking mentions in the prose.
+    entities = artwork.get("_link_entities", [])
 
     if generate and openai_key() and facts:
         try:
@@ -160,12 +162,16 @@ def build(artwork, artist, generate=False):
                     "mode": "generated",
                     "verified": True,
                     "warnings": verdict["warnings"],
+                    "entities": entities,
                 }
-            print(f"[article] gate failed, using fallback: {verdict['reasons']}")
+            print(f"[article] too little verified content, using fallback "
+                  f"(dropped {verdict['dropped']} sentence(s))")
         except Exception as e:  # network, SDK, parse — never break the page
             print(f"[article] generation error, using fallback: {e}")
 
-    return _fallback(artwork, artist, title)
+    payload = _fallback(artwork, artist, title)
+    payload["entities"] = entities
+    return payload
 
 
 def _generate(facts, title):
@@ -219,15 +225,23 @@ def _generate(facts, title):
 
 
 def _verify(article, facts):
-    """Gate the generated blog post against the fact packet (per sentence)."""
+    """Verify the blog post per sentence and DROP any sentence that isn't grounded.
+
+    Rather than reject the whole post when one sentence is ungrounded (which on a
+    long article means the reader almost always sees the plain summary), we drop
+    the offending sentences and keep the verified rest — so what's published is
+    still 100% grounded. We only fall back entirely if too little survives.
+
+    A sentence is dropped if it cites no real fact, asserts a number that's
+    nowhere in the dossier, or has near-zero word overlap with its cited facts.
+    Numbers are checked against ALL facts (every fact is real Wikidata data, so a
+    number is only "fabricated" if it appears in no fact at all).
+    """
     by_id = {f["id"]: f["text"] for f in facts}
-    # Numbers are trusted if they appear in ANY fact (every fact is real Wikidata
-    # data), so a number is only "fabricated" if it's nowhere in the dossier. This
-    # avoids false positives when the model combines facts in one sentence but
-    # doesn't cite every id. Support overlap still uses the sentence's cited facts.
     all_evidence = " ".join(by_id.values())
-    reasons = []
     warnings = []
+    dropped = 0
+    kept = 0
     sections = []
 
     for section in article.get("sections", []):
@@ -241,28 +255,31 @@ def _verify(article, facts):
                     continue
                 ids = [i for i in sent.get("facts", []) if i in by_id]
                 if not ids:
-                    reasons.append(f"uncited: {text[:70]}")
+                    dropped += 1
+                    warnings.append(f"dropped (uncited): {text[:70]}")
+                    continue
+                if numeric_date_facts.unverified_numbers(text, all_evidence):
+                    dropped += 1
+                    warnings.append(f"dropped (unverified number): {text[:70]}")
                     continue
                 evidence = " ".join(by_id[i] for i in ids)
-
-                bad = numeric_date_facts.unverified_numbers(text, all_evidence)
-                if bad:
-                    reasons.append(f"unverified number(s) {bad}: {text[:70]}")
-
                 score = support_span.overlap_score(text, evidence)
                 if score < support_span.BLOCK_FLOOR:
-                    reasons.append(f"unsupported (overlap {score:.2f}): {text[:70]}")
-                elif score < support_span.WARN_FLOOR:
-                    warnings.append(f"weak support (overlap {score:.2f}): {text[:70]}")
-
+                    dropped += 1
+                    warnings.append(f"dropped (unsupported {score:.2f}): {text[:70]}")
+                    continue
+                if score < support_span.WARN_FLOOR:
+                    warnings.append(f"weak support ({score:.2f}): {text[:70]}")
                 sentences.append(text)
+                kept += 1
             if sentences:
                 paragraphs.append(" ".join(sentences))
         if paragraphs:
             sections.append({"heading": heading, "paragraphs": paragraphs})
 
-    ok = (not reasons) and bool(sections)
-    return {"ok": ok, "reasons": reasons, "warnings": warnings, "sections": sections}
+    # Publish only if enough verified content survived; else use the summary.
+    ok = kept >= 2 and bool(sections)
+    return {"ok": ok, "warnings": warnings, "dropped": dropped, "sections": sections}
 
 
 def _a_or_an(word):

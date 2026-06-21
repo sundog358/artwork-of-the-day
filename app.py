@@ -1,6 +1,7 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 import requests
 from datetime import datetime
+import json
 import random
 import re
 import os
@@ -36,6 +37,7 @@ _load_dotenv()
 
 import article_writer  # noqa: E402  (imported after .env is loaded)
 import sparql_library  # noqa: E402
+import linked_art  # noqa: E402
 
 QID_RE = re.compile(r'^Q\d+$')
 
@@ -61,6 +63,7 @@ _cache_lock = threading.Lock()
 _day_cache = {"date": None, "payload": None}
 _details_cache = {}
 _article_cache = {}
+_la_cache = {}  # Linked Art records: (kind, qid) -> record dict
 
 
 def run_sparql(query, timeout=45):
@@ -338,6 +341,236 @@ def artwork_article():
     except Exception as e:
         print(f"Error in artwork_article: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+_LA_CTX = linked_art.CONTEXT
+_LA_CONTENT_TYPE = f'application/ld+json; charset=utf-8; profile="{_LA_CTX}"'
+
+
+def _ld_response(record, status=200):
+    """Serialize a plain JSON-LD body (used for error payloads)."""
+    resp = make_response(json.dumps(record, ensure_ascii=False, indent=2), status)
+    resp.headers["Content-Type"] = "application/ld+json; charset=utf-8"
+    return resp
+
+
+def _hal_links(self_uri):
+    """The spec's non-semantic HAL '_links' envelope (added outside the
+    schema-validated semantic body)."""
+    return {
+        "self": self_uri,
+        "curies": [
+            {"name": "la", "href": "https://linked.art/api/rels/1/{rel}", "templated": True}
+        ],
+        "la:modelVersion": {"href": "https://linked.art/model/1.0/", "name": "v1.0"},
+        "la:apiVersion": {"href": "https://linked.art/api/1.0/", "name": "v1.0"},
+    }
+
+
+def _wants_html(req):
+    """Content negotiation: HTML only when explicitly asked or strictly
+    preferred over JSON-LD. Default (curl, no Accept) → JSON-LD."""
+    fmt = (req.args.get("format") or "").lower()
+    if fmt == "html":
+        return True
+    if fmt in ("json", "jsonld", "ld+json"):
+        return False
+    accept = req.accept_mimetypes
+    html_q = accept["text/html"]
+    json_q = max(accept["application/ld+json"], accept["application/json"])
+    return html_q > json_q
+
+
+def _render_la_html(record, self_uri):
+    """A minimal human-readable HTML representation at the same URI."""
+    import html as _html
+    label = _html.escape(str(record.get("_label", "Record")))
+    rtype = _html.escape(str(record.get("type", "")))
+    desc = ""
+    for r in record.get("referred_to_by", []):
+        desc = _html.escape(r.get("content", ""))
+        break
+    pretty = _html.escape(json.dumps(record, indent=2, ensure_ascii=False))
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{label} — Linked Art</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}}
+h1{{margin-bottom:.2rem}} .t{{color:#666;font-size:.9rem}} pre{{background:#f5f5f5;padding:1rem;border-radius:8px;overflow:auto;font-size:.8rem}}
+a{{color:#2c5d8a}}</style></head>
+<body>
+<h1>{label}</h1>
+<p class="t">{rtype} · <a href="https://linked.art/">Linked Art</a> record</p>
+<p>{desc}</p>
+<p><a href="{self_uri}?format=jsonld">View JSON-LD ↗</a></p>
+<pre>{pretty}</pre>
+</body></html>"""
+    resp = make_response(page)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+def _serve_la(record, self_uri, status=200):
+    """Serve a semantic Linked Art record: HTML or JSON-LD (with HAL envelope)
+    per content negotiation."""
+    if _wants_html(request):
+        return _render_la_html(record, self_uri)
+    body = dict(record)
+    body["_links"] = _hal_links(self_uri)
+    resp = make_response(json.dumps(body, ensure_ascii=False, indent=2), status)
+    resp.headers["Content-Type"] = _LA_CONTENT_TYPE
+    return resp
+
+
+def _dossier_or_facts(qid):
+    """(artwork, artist, artist_qid) — full dossier when a creator exists."""
+    artist_qid = sparql_library.creator_of(qid)
+    if artist_qid:
+        artwork, artist = sparql_library.build_dossier(qid, artist_qid)
+    else:
+        artwork, artist = sparql_library.artwork_facts(qid), {}
+    return artwork, artist, artist_qid
+
+
+@app.route('/object/<qid>', methods=['GET'])
+def linked_art_object(qid):
+    """Linked Art (https://linked.art) HumanMadeObject record for an artwork."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid object id"}, 400)
+    cached = _la_cache.get(("object", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        artwork, artist, artist_qid = _dossier_or_facts(qid)
+        if not artwork:
+            return _ld_response({"error": "object not found"}, 404)
+        base = request.host_url.rstrip("/")
+        person_uri = f"{base}/person/{artist_qid}" if artist_qid else None
+        # Grounded Wikidata summary (no OpenAI) as the description.
+        summary = article_writer.build(artwork, artist, generate=False)
+        desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
+        record = linked_art.object_record(
+            artwork, artist, base=base,
+            object_uri=f"{base}/object/{qid}", person_uri=person_uri,
+            artwork_qid=qid, artist_qid=artist_qid, description=desc,
+        )
+        with _cache_lock:
+            _la_cache[("object", qid)] = record
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_object: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route('/visual/<qid>', methods=['GET'])
+def linked_art_visual(qid):
+    """Linked Art VisualItem record — the subjects an artwork depicts."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid visual id"}, 400)
+    cached = _la_cache.get(("visual", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        artwork = sparql_library.artwork_facts(qid)
+        if not artwork:
+            return _ld_response({"error": "visual not found"}, 404)
+        artwork["depicts"] = sparql_library.related([(qid, "depicts", "P180")]).get("depicts", [])
+        base = request.host_url.rstrip("/")
+        depicts_qids = [d["qid"] for d in artwork["depicts"] if d.get("qid")]
+        entity_types = sparql_library.classify_entities(depicts_qids) if depicts_qids else {}
+        record = linked_art.visual_record(
+            artwork, visual_uri=f"{base}/visual/{qid}", artwork_qid=qid,
+            entity_types=entity_types,
+        )
+        with _cache_lock:
+            _la_cache[("visual", qid)] = record
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_visual: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route('/person/<qid>', methods=['GET'])
+def linked_art_person(qid):
+    """Linked Art (https://linked.art) Person record for an artist."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid person id"}, 400)
+    cached = _la_cache.get(("person", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        artist = sparql_library.artist_facts(qid)
+        if not artist:
+            return _ld_response({"error": "person not found"}, 404)
+        base = request.host_url.rstrip("/")
+        record = linked_art.person_record(
+            artist, base=base, person_uri=f"{base}/person/{qid}", artist_qid=qid,
+        )
+        with _cache_lock:
+            _la_cache[("person", qid)] = record
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_person: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route('/place/<qid>', methods=['GET'])
+def linked_art_place(qid):
+    """Linked Art Place record (with WKT geometry + Getty TGN equivalent)."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid place id"}, 400)
+    cached = _la_cache.get(("place", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        facts = sparql_library.place_facts(qid)
+        if not facts:
+            return _ld_response({"error": "place not found"}, 404)
+        base = request.host_url.rstrip("/")
+        record = linked_art.place_record(facts, place_uri=f"{base}/place/{qid}", place_qid=qid)
+        with _cache_lock:
+            _la_cache[("place", qid)] = record
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_place: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route('/group/<qid>', methods=['GET'])
+def linked_art_group(qid):
+    """Linked Art Group record (museum/collection/institution)."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid group id"}, 400)
+    cached = _la_cache.get(("group", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        facts = sparql_library.group_facts(qid)
+        if not facts:
+            return _ld_response({"error": "group not found"}, 404)
+        base = request.host_url.rstrip("/")
+        record = linked_art.group_record(facts, group_uri=f"{base}/group/{qid}", group_qid=qid)
+        with _cache_lock:
+            _la_cache[("group", qid)] = record
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_group: {e}")
+        return _ld_response({"error": str(e)}, 500)
 
 
 @app.after_request

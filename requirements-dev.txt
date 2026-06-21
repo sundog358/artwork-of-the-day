@@ -1,0 +1,4 @@
+# Dev-only dependencies (not needed to run the app).
+# Used by validate_linked_art.py to check Linked Art records against the
+# official JSON Schemas in linked_art_schema/.
+jsonschema==4.26.0

@@ -72,6 +72,12 @@ def _v(row, key):
     return row.get(key, {}).get("value", "")
 
 
+def _qid_of(row, key):
+    """Extract a bare Q-id from a row's entity-URI binding (or '')."""
+    q = qid(_v(row, key))
+    return q if QID_RE.match(q) else ""
+
+
 def _labels_from(items, limit):
     """Join the labels of a [{qid,label}] list into a capped phrase."""
     labels = [d["label"] for d in (items or []) if d.get("label")]
@@ -84,9 +90,10 @@ def _labels_from(items, limit):
 # --------------------------------------------------------------------------- #
 def artwork_facts(artwork_id):
     query = """
-    SELECT ?artworkLabel ?date ?genreLabel ?mediumLabel ?height ?width ?locationLabel
-           ?inventory ?commissionedByLabel ?seriesLabel ?creationPlaceLabel
-           ?countryLabel ?mainSubjectLabel WHERE {
+    SELECT ?artworkLabel ?date ?genre ?genreLabel ?medium ?mediumLabel ?height ?width
+           ?location ?locationLabel ?inventory ?commissionedByLabel ?seriesLabel
+           ?creationPlace ?creationPlaceLabel ?country ?countryLabel
+           ?mainSubjectLabel ?image WHERE {
       BIND(wd:%s AS ?artwork)
       OPTIONAL { ?artwork wdt:P571 ?date. }            # inception
       OPTIONAL { ?artwork wdt:P136 ?genre. }           # genre
@@ -100,6 +107,7 @@ def artwork_facts(artwork_id):
       OPTIONAL { ?artwork wdt:P1071 ?creationPlace. }  # location of creation
       OPTIONAL { ?artwork wdt:P495 ?country. }         # country of origin
       OPTIONAL { ?artwork wdt:P921 ?mainSubject. }     # main subject
+      OPTIONAL { ?artwork wdt:P18 ?image. }            # image (Commons)
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
@@ -122,16 +130,25 @@ def artwork_facts(artwork_id):
     return {
         "title": title,
         "creationDate": format_date(_v(r, "date")),
+        "creationDateRaw": _v(r, "date"),   # ISO, for Linked Art timespans
         "genre": _v(r, "genreLabel") or "Unknown",
+        "genreQid": _qid_of(r, "genre"),
         "medium": _v(r, "mediumLabel") or "Unknown",
+        "mediumQid": _qid_of(r, "medium"),
         "dimensions": dimensions or "Unknown",
+        "heightCm": _v(r, "height"),        # raw numeric strings, for Linked Art dimensions
+        "widthCm": _v(r, "width"),
         "location": _v(r, "locationLabel") or "Unknown",
+        "locationQid": _qid_of(r, "location"),
         "inventory": _v(r, "inventory"),
         "commissionedBy": _v(r, "commissionedByLabel"),
         "series": _v(r, "seriesLabel"),
         "creationPlace": _v(r, "creationPlaceLabel"),
+        "creationPlaceQid": _qid_of(r, "creationPlace"),
         "country": _v(r, "countryLabel"),
+        "countryQid": _qid_of(r, "country"),
         "mainSubject": _v(r, "mainSubjectLabel"),
+        "image": commons_thumb(_v(r, "image")),
     }
 
 
@@ -143,8 +160,8 @@ def artist_facts(artist_id):
     are fetched as additive rows in build_dossier() to avoid GROUP_CONCAT
     cartesian blow-up on prolific artists."""
     query = """
-    SELECT ?artistLabel ?artistDescription ?birth ?death ?birthPlaceLabel
-           ?deathPlaceLabel ?image ?article WHERE {
+    SELECT ?artistLabel ?artistDescription ?birth ?death ?birthPlace ?birthPlaceLabel
+           ?deathPlace ?deathPlaceLabel ?image ?article WHERE {
       BIND(wd:%s AS ?artist)
       OPTIONAL { ?artist wdt:P569 ?birth. }
       OPTIONAL { ?artist wdt:P570 ?death. }
@@ -173,13 +190,137 @@ def artist_facts(artist_id):
         "name": name,
         "description": _v(r, "artistDescription"),
         "birthdate": format_date(birth_raw),
+        "birthDateRaw": birth_raw,          # ISO, for Linked Art Birth timespan
         "birthplace": _v(r, "birthPlaceLabel"),
+        "birthPlaceQid": _qid_of(r, "birthPlace"),
         "deathdate": format_date(death) if death else "",
+        "deathDateRaw": death,
         "deathplace": _v(r, "deathPlaceLabel"),
+        "deathPlaceQid": _qid_of(r, "deathPlace"),
         "image": commons_thumb(_v(r, "image")),
         "wikipedia": _v(r, "article"),
         "_birthYear": birth_year,
     }
+
+
+def creator_of(artwork_qid):
+    """Return the QID of an artwork's creator (P170), or '' if none."""
+    if not QID_RE.match(artwork_qid):
+        return ""
+    query = "SELECT ?c WHERE { wd:%s wdt:P170 ?c. } LIMIT 1" % artwork_qid
+    try:
+        rows = run_sparql(query, timeout=20)
+    except Exception as e:
+        print(f"creator_of error: {e}")
+        return ""
+    return qid(rows[0]["c"]["value"]) if rows else ""
+
+
+# --------------------------------------------------------------------------- #
+# Facts for dereferenceable Place / Group records (Linked Art)                #
+# --------------------------------------------------------------------------- #
+def place_facts(place_qid):
+    """Scalar facts for a place: label, description, WKT point, Getty TGN id."""
+    if not QID_RE.match(place_qid):
+        return {}
+    query = """
+    SELECT ?placeLabel ?placeDescription ?coord ?tgn ?typeLabel WHERE {
+      BIND(wd:%s AS ?place)
+      OPTIONAL { ?place wdt:P625 ?coord. }     # coordinate location
+      OPTIONAL { ?place wdt:P1667 ?tgn. }      # Getty TGN ID
+      OPTIONAL { ?place wdt:P31 ?type. }       # instance of (e.g. city)
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 1
+    """ % place_qid
+    try:
+        rows = run_sparql(query, timeout=20)
+    except Exception as e:
+        print(f"place_facts error: {e}")
+        return {}
+    if not rows:
+        return {}
+    r = rows[0]
+    name = _v(r, "placeLabel")
+    if not name or QID_RE.match(name):
+        name = "Unknown place"
+    # P625 comes back as a WKT literal "Point(lon lat)"; normalise to "POINT(...)".
+    coord = _v(r, "coord")
+    wkt = coord.replace("Point(", "POINT(").replace("point(", "POINT(") if coord else ""
+    return {
+        "name": name,
+        "description": _v(r, "placeDescription"),
+        "wkt": wkt,
+        "tgn": _v(r, "tgn"),
+        "type": _v(r, "typeLabel"),
+    }
+
+
+def group_facts(group_qid):
+    """Scalar facts for a group/institution: label, description, inception, TGN/ULAN."""
+    if not QID_RE.match(group_qid):
+        return {}
+    query = """
+    SELECT ?groupLabel ?groupDescription ?inception ?ulan WHERE {
+      BIND(wd:%s AS ?group)
+      OPTIONAL { ?group wdt:P571 ?inception. }   # inception (date formed)
+      OPTIONAL { ?group wdt:P245 ?ulan. }        # Getty ULAN ID
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 1
+    """ % group_qid
+    try:
+        rows = run_sparql(query, timeout=20)
+    except Exception as e:
+        print(f"group_facts error: {e}")
+        return {}
+    if not rows:
+        return {}
+    r = rows[0]
+    name = _v(r, "groupLabel")
+    if not name or QID_RE.match(name):
+        name = "Unknown group"
+    return {
+        "name": name,
+        "description": _v(r, "groupDescription"),
+        "inception": _v(r, "inception"),
+        "ulan": _v(r, "ulan"),
+    }
+
+
+def classify_entities(qids):
+    """Map each QID to a CIDOC-CRM class for Linked Art references.
+
+    Used to type the subjects a painting `shows`. We detect the two cases that
+    matter for depicted subjects — a human (`P31 = Q5` → Person) and a place
+    (anything carrying a coordinate `P625` → Place) — and fall back to the
+    generic `Type` for concepts/things. One batched query, no per-entity calls.
+    """
+    valid = [q for q in dict.fromkeys(qids) if QID_RE.match(q)]
+    out = {q: "Type" for q in valid}
+    if not valid:
+        return out
+    values = " ".join(f"wd:{q}" for q in valid)
+    query = """
+    SELECT ?e (SAMPLE(?human) AS ?isHuman) (SAMPLE(?coord) AS ?hasCoord) WHERE {
+      VALUES ?e { %s }
+      OPTIONAL { ?e wdt:P31 ?cls. BIND(IF(?cls = wd:Q5, 1, 0) AS ?human) }
+      OPTIONAL { ?e wdt:P625 ?coord. }
+    }
+    GROUP BY ?e
+    """ % values
+    try:
+        rows = run_sparql(query, timeout=25)
+    except Exception as e:
+        print(f"classify_entities error: {e}")
+        return out
+    for r in rows:
+        q = qid(_v(r, "e"))
+        if _v(r, "isHuman") == "1":
+            out[q] = "Person"
+        elif _v(r, "hasCoord"):
+            out[q] = "Place"
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -307,5 +448,37 @@ def build_dossier(artwork_id, artist_id):
         artist["contemporaries"] = contemporaries(
             movement_qids, artist.get("_birthYear"), artist_id
         )[:6]
+
+    # Entity link map for in-article linking: proper-noun labels → QID. We link
+    # only "named" entities (label has an uppercase letter), which neatly skips
+    # generic concepts like "sky", "painter", "portrait" while keeping people,
+    # places, institutions, movements, and works.
+    link_map = {}
+
+    def _add_entity(label, ent_qid):
+        if not label or not ent_qid or not QID_RE.match(ent_qid):
+            return
+        if len(label) < 3 or not any(c.isupper() for c in label):
+            return
+        link_map.setdefault(label.lower(), {"label": label, "qid": ent_qid})
+
+    if artwork and artwork.get("title") and artwork["title"] != "Untitled":
+        _add_entity(artwork["title"], artwork_id)
+    if artist and artist.get("name") and artist["name"] != "Unknown artist":
+        _add_entity(artist["name"], artist_id)
+    # Cap per source — only entities that can plausibly appear in the prose (the
+    # article is built from a similarly capped fact packet); keeps the map lean.
+    for key in ("depicts", "collection", "movementLinks", "influencedBy",
+                "artistMovement", "nationality", "occupation", "notableWork",
+                "education", "teacher", "student", "genre", "award", "memberOf"):
+        for e in nb.get(key, [])[:10]:
+            _add_entity(e.get("label"), e.get("qid"))
+    for e in (artist.get("contemporaries") if artist else []) or []:
+        _add_entity(e.get("label"), e.get("qid"))
+
+    # Longest label first so multi-word names win over substrings when matching.
+    entities = sorted(link_map.values(), key=lambda x: len(x["label"]), reverse=True)
+    if artwork:
+        artwork["_link_entities"] = entities
 
     return artwork, artist

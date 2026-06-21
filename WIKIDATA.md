@@ -408,3 +408,49 @@ The dossier (now ~24 facts) drives [article_writer.py](article_writer.py):
 
 **Next phases** — Wikipedia links on chips; source references (`P854`) under the
 article; per-artwork "angle" selection for variety.
+
+## 8. Linked Art output ([linked.art](https://linked.art/api/1.0/))
+
+We publish the data as **Linked Art** — a CIDOC-CRM profile in JSON-LD used
+across cultural-heritage Linked Open Data. [linked_art.py](linked_art.py) maps
+the dossier to records; [app.py](app.py) serves them. Five dereferenceable,
+cross-linked record types (each `id` is its own retrieval URI; follow the graph):
+
+- `GET /object/<QID>` → **HumanMadeObject**: `identified_by` (primary Name +
+  accession Identifier), `classified_as` (AAT Painting/Artwork **+ genre**),
+  `referred_to_by` (grounded description), `dimension` (cm + AAT units),
+  `made_of` (medium → AAT, or Wikidata material URI), `produced_by` (creator →
+  `/person`, `took_place_at` → `/place`, timespan), `current_location` →
+  `/place`, `current_owner` → `/group`, `shows` → `/visual`, `representation`
+  (image), `equivalent` (Wikidata).
+- `GET /visual/<QID>` → **VisualItem**: `represents` the depicted subjects,
+  each typed by CRM class (people → `Person`, places → `Place`, else `Type`,
+  resolved from Wikidata `P31`/`P625`).
+- `GET /person/<QID>` → **Person**: Name, `born`/`died` (TimeSpan +
+  `took_place_at` → `/place`), description, `equivalent` (Wikidata).
+- `GET /place/<QID>` → **Place**: Name, `defined_by` (WKT point from `P625`),
+  `equivalent` (Wikidata + Getty **TGN**).
+- `GET /group/<QID>` → **Group**: Name, `formed_by` (inception), `equivalent`
+  (Wikidata + Getty **ULAN**).
+
+**Protocol.** Records are served as
+`application/ld+json;profile="https://linked.art/ns/v1/linked-art.json"`, with
+**content negotiation** — `Accept: text/html` (or `?format=html`) returns a
+human-readable HTML view at the same URI; `?format=jsonld` forces JSON-LD. Each
+response carries the spec's **HAL `_links`** envelope (`self`, `curies`,
+`la:modelVersion`, `la:apiVersion`). The page advertises the current artwork via
+`<link rel="alternate" type="application/ld+json" href="/object/<QID>">`.
+
+**Validation.** [validate_linked_art.py](validate_linked_art.py) checks the
+emitted records against the **official Linked Art JSON Schemas** (vendored in
+[linked_art_schema/](linked_art_schema/) from `linked-art/json-validator`,
+Apache-2.0) — all five types pass. Run: `python validate_linked_art.py`
+(needs `pip install -r requirements-dev.txt`). The HAL `_links` block is the
+spec's *non-semantic* envelope, added at the response layer and excluded from
+the schema-validated semantic body (the schemas set
+`additionalProperties: false`).
+
+**Remaining nuance:** depicted-subject typing uses a human/coordinate heuristic
+(people and places are detected; other concepts default to the generic `Type`).
+Everything else maps to AAT/TGN/ULAN where the authority exists, and to Wikidata
+otherwise — so coverage is complete wherever the source data has the value.

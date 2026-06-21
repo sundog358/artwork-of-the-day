@@ -9,6 +9,8 @@
       content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
     />
     <link rel="icon" type="image/jpeg" href="/static/8sprocket.jpg" />
+    <!-- Linked Art (https://linked.art) record for the current artwork; href set per item. -->
+    <link rel="alternate" id="la-alt" type="application/ld+json" href="" />
     <!-- Add Bootstrap and FontAwesome like openartbrowser -->
     <link
       rel="stylesheet"
@@ -149,6 +151,14 @@
         letter-spacing: 0.04em;
         color: #6b7c8c;
         margin: 12px 0 4px;
+      }
+      .aotd-about .wd-link {
+        color: #2c5d8a;
+        text-decoration: none;
+        border-bottom: 1px dotted #9bbcd6;
+      }
+      .aotd-about .wd-link:hover {
+        border-bottom-style: solid;
       }
       .about-tag {
         font-size: 0.72rem;
@@ -604,6 +614,50 @@
         }
       }
 
+      // Wrap known entity labels in the text with links to Wikidata. Uses plain
+      // string search (no regex on user text), whole-word boundaries, links the
+      // first occurrence of each entity once (tracked in `linked`), and escapes
+      // everything so the output is HTML-safe.
+      function linkifyText(text, entities, linked) {
+        if (!entities || !entities.length) return esc(text);
+        const lower = text.toLowerCase();
+        const matches = [];
+        for (const e of entities) {
+          if (!e.qid || linked.has(e.qid)) continue;
+          const needle = (e.label || "").toLowerCase();
+          if (!needle) continue;
+          let from = 0,
+            idx;
+          while ((idx = lower.indexOf(needle, from)) !== -1) {
+            const end = idx + needle.length;
+            const before = idx === 0 ? " " : text[idx - 1];
+            const after = end >= text.length ? " " : text[end];
+            const wholeWord = !/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after);
+            const overlaps = matches.some((m) => idx < m.end && end > m.start);
+            if (wholeWord && !overlaps) {
+              matches.push({ start: idx, end: end, qid: e.qid });
+              linked.add(e.qid);
+              break; // first occurrence of this entity only
+            }
+            from = idx + 1;
+          }
+        }
+        if (!matches.length) return esc(text);
+        matches.sort((a, b) => a.start - b.start);
+        let out = "",
+          pos = 0;
+        for (const m of matches) {
+          out += esc(text.slice(pos, m.start));
+          out +=
+            `<a class="wd-link" href="https://www.wikidata.org/wiki/${esc(m.qid)}" target="_blank" rel="noopener">` +
+            esc(text.slice(m.start, m.end)) +
+            `</a>`;
+          pos = m.end;
+        }
+        out += esc(text.slice(pos));
+        return out;
+      }
+
       function renderArticle(item, article) {
         const el = document.getElementById("aotd-about");
         // Prefer sectioned format; fall back to a flat paragraphs payload (older
@@ -621,10 +675,18 @@
           : `<span class="about-tag" title="Assembled directly from Wikidata — no AI used">📋 From Wikidata</span>`;
         const headline =
           generated && article.title ? `<p class="aotd-headline">${esc(article.title)}</p>` : "";
+        // Link known Wikidata entities (proper nouns from the dossier) in the
+        // prose — first occurrence each, shared across the whole post.
+        const entities = (article.entities || [])
+          .slice()
+          .sort((a, b) => (b.label || "").length - (a.label || "").length);
+        const linked = new Set();
         const body = sections
           .map((s) => {
             const h = s.heading ? `<h4 class="aotd-sec">${esc(s.heading)}</h4>` : "";
-            const paras = (s.paragraphs || []).map((p) => `<p>${esc(p)}</p>`).join("");
+            const paras = (s.paragraphs || [])
+              .map((p) => `<p>${linkifyText(p, entities, linked)}</p>`)
+              .join("");
             return h + paras;
           })
           .join("");
@@ -656,6 +718,10 @@
       async function showCurrent() {
         const item = state.items[state.index];
         const multi = state.items.length > 1;
+
+        // Advertise this artwork's Linked Art record for machine discovery.
+        const laAlt = document.getElementById("la-alt");
+        if (laAlt) laAlt.href = "/object/" + item.artwork_id;
 
         document.getElementById("content").innerHTML = `
           <div class="artwork">
