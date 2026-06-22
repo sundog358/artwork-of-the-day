@@ -32,10 +32,11 @@
         overflow: hidden;
       }
       .container {
-        max-width: 1400px;
+        max-width: none;
+        width: 100%;
         height: 100vh;
-        margin: auto;
-        padding: 16px 28px 20px;
+        margin: 0;
+        padding: 14px 28px 18px;
         display: flex;
         flex-direction: column;
         box-sizing: border-box;
@@ -216,9 +217,9 @@
         text-decoration: none;
       }
       h1 {
-        text-align: center;
-        margin: 0 0 8px;
-        font-size: 1.8rem;
+        text-align: left;
+        margin: 0;
+        font-size: 1.9rem;
         color: #2c3e50;
       }
       .occasion {
@@ -242,8 +243,21 @@
       }
       h2 {
         color: #2c3e50;
-        margin: 0 0 12px;
-        font-size: 1.5rem;
+        margin: 0 0 2px;
+        font-size: 1.85rem;
+        line-height: 1.2;
+      }
+      .aotd-byline {
+        margin: 0 0 14px;
+        font-size: 1.12rem;
+        color: #4a5a6a;
+      }
+      .aotd-byline:empty {
+        display: none;
+      }
+      .aotd-byline .artist-name {
+        font-weight: 700;
+        color: #1f5b86;
       }
       h3 {
         color: #34495e;
@@ -374,13 +388,13 @@
       .site-header {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 14px;
         margin-bottom: 8px;
       }
       .site-logo {
-        width: 42px;
-        height: 42px;
+        width: 48px;
+        height: 48px;
         border-radius: 8px;
         background: #fff;
       }
@@ -389,13 +403,13 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 14px;
+        gap: 18px;
         margin-top: 12px;
-        padding: 10px 18px;
+        padding: 14px 24px;
         background: #122438; /* midnight rain navy */
         color: #ffffff;
         border-radius: 8px;
-        font-size: 0.84rem;
+        font-size: 0.9rem;
       }
       .footer-text {
         text-align: left;
@@ -403,8 +417,8 @@
       }
       .footer-stamp {
         flex: 0 0 auto;
-        width: 58px;
-        height: 58px;
+        width: 84px;
+        height: 84px;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.2s ease;
       }
@@ -416,13 +430,14 @@
         color: #cfe0f2;
       }
       .footer-copy {
-        font-weight: 600;
+        font-weight: 700;
+        font-size: 1rem;
         letter-spacing: 0.02em;
       }
       .footer-sub {
         color: #aebfd4;
-        font-size: 0.76rem;
-        margin-top: 3px;
+        font-size: 0.82rem;
+        margin-top: 4px;
       }
 
       /* Narrow screens: stack image over info and allow normal scrolling. */
@@ -832,6 +847,7 @@
             </div>
             <div class="artwork-info">
               <h2 id="aotd-title">Loading…</h2>
+              <div class="aotd-byline" id="aotd-byline"></div>
               <div class="aotd-about" id="aotd-about"></div>
               <div class="info-grid">
                 <div class="artist-section" id="aotd-artist">
@@ -885,6 +901,23 @@
         const artwork = details.artwork || {};
         const artist = details.artist || {};
         document.getElementById("aotd-title").textContent = artwork.title || "Untitled";
+        // Prominent byline: by <Artist> (birth–death) · <date>
+        const name =
+          artist.name && artist.name !== "Unknown artist" ? artist.name : "";
+        const yr = (s) => {
+          const m = (s || "").match(/\d{4}/);
+          return m ? m[0] : "";
+        };
+        const b = yr(artist.birthdate),
+          d = yr(artist.deathdate);
+        const life = b ? ` (${b}${d ? "–" + d : ""})` : "";
+        const date =
+          artwork.creationDate && artwork.creationDate !== "Unknown"
+            ? ` · ${esc(artwork.creationDate)}`
+            : "";
+        document.getElementById("aotd-byline").innerHTML = name
+          ? `by <span class="artist-name">${esc(name)}</span>${life}${date}`
+          : "";
         document.getElementById("aotd-artist").innerHTML = artistSectionHTML(artist);
         document.getElementById("aotd-artwork").innerHTML = artworkSectionHTML(artwork);
       }
