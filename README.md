@@ -76,9 +76,12 @@ built-in daily cache + `Cache-Control`) keeps load on Wikidata minimal.
 
 ## Architecture
 
-- `app.py` — Flask app. `/artwork-of-the-day` returns the day's gallery list;
-  `/artwork-details?artwork=Q…&artist=Q…` returns details for one item. Both are
-  cached (the gallery per day, details for the process lifetime).
+- `app.py` — Flask app. `/artwork-of-the-day` returns the day's gallery list
+  (pass `?month=&day=` to browse any date); `/artwork-details?artwork=Q…&artist=Q…`
+  returns details for one item. **Explore** endpoints: `/resolve?artwork=Q…` (or
+  `?artist=Q…`) turns a QID into a displayable item, and `/surprise` returns a
+  random painting — these power the in-app click-through, "Surprise me", and date
+  picker. Everything is cached for the process lifetime.
 - `serve.py` — production WSGI entry point (Waitress).
 - `static/index.html` — the single-page frontend (vanilla JS).
 - `WIKIDATA.md` — Wikidata/Wikibase query and data-model reference.

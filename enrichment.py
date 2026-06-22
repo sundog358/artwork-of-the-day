@@ -126,7 +126,7 @@ def build(artwork_id, artist_id, artwork, artist):
             paras.append(f"Their documented paintings on Wikidata span {years[0]}–{years[-1]}.")
         sections.append({"heading": "Other works by the artist", "paragraphs": paras})
         for w in works[:6]:
-            entities.append({"label": w["label"], "qid": w["qid"]})
+            entities.append({"label": w["label"], "qid": w["qid"], "open": "artwork"})
 
     # --- 2b. Collections that hold the artist's work ---------------------- #
     collections = S.artist_collections(artist_id, limit=8)

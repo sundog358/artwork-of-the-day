@@ -120,6 +120,8 @@ _day_cache = {"date": None, "payload": None}  # single entry; no cap needed
 _details_cache = OrderedDict()
 _article_cache = OrderedDict()
 _enrichment_cache = OrderedDict()  # progressive enrichment payloads
+_date_cache = OrderedDict()  # galleries for a specific month/day (explore: pick a date)
+_resolve_cache = OrderedDict()  # explore: artwork/artist QID -> a displayable item
 _la_cache = OrderedDict()  # Linked Art records: (kind, qid) -> record dict
 
 
@@ -252,14 +254,62 @@ def legal():
 MAX_GALLERY = 30
 
 
+def _build_gallery(month, day, date_label, seed):
+    """Build the gallery payload for a given month/day. Returns the payload dict,
+    or None if no paintings could be found at all."""
+    rng = random.Random(seed)
+    occasion = "birthday"
+    paintings = birthday_paintings(month, day)
+    if not paintings:
+        occasion = "random"
+        paintings = get_random_paintings(rng)
+    paintings = dedupe_by_artwork(paintings)
+    if not paintings:
+        return None
+    rng.shuffle(paintings)
+    items = [{
+        "artwork_id": p["artwork_id"],
+        "creator_id": p["creator_id"],
+        "image": commons_thumb(p["image"]),
+        "birthYear": p.get("birth", "")[:4],
+    } for p in paintings[:MAX_GALLERY]]
+    return {
+        "status": "success",
+        "occasion": occasion,
+        "today": date_label,
+        "count": len(items),
+        "items": items,
+    }
+
+
 @app.route('/artwork-of-the-day', methods=['GET'])
 def artwork_of_the_day():
-    """Return the list of artworks connected to today's date.
+    """Return the list of artworks connected to a date.
 
-    The frontend flips through them with arrows, fetching each artwork's
-    details on demand from /artwork-details (so this endpoint stays fast).
+    Defaults to today; pass ?month=&day= to browse any calendar date (the
+    explore date picker). The frontend flips through the list with arrows and
+    fetches each artwork's details on demand, so this endpoint stays fast.
     """
     try:
+        m, d = request.args.get('month'), request.args.get('day')
+        if m and d:
+            # Explicit date (explore): validate, then serve from the per-date cache.
+            try:
+                month, day = int(m), int(d)
+                date_label = datetime(2000, month, day).strftime('%B %d')  # 2000 = leap year
+            except (ValueError, TypeError):
+                return jsonify({"status": "error", "message": "Invalid month/day"}), 400
+            key = f"{month:02d}-{day:02d}"
+            with _cache_lock:
+                if key in _date_cache:
+                    return jsonify(_date_cache[key])
+            payload = _build_gallery(month, day, date_label, f"date-{key}")
+            if payload is None:
+                return jsonify({"status": "error", "message": "No paintings found for that date"}), 404
+            with _cache_lock:
+                _cache_set(_date_cache, key, payload)
+            return jsonify(payload)
+
         today = datetime.now()
         date_key = today.strftime('%Y-%m-%d')
 
@@ -268,45 +318,17 @@ def artwork_of_the_day():
             if _day_cache["date"] == date_key:
                 return jsonify(_day_cache["payload"])
 
-        date_label = today.strftime('%B %d')  # e.g. "June 20"
-        # Seed by date so ordering is stable for the whole day, but changes daily.
-        rng = random.Random(date_key)
-
-        # Connect the artwork to today's date by the artist's birthday. Fall back
-        # to random paintings so the page is never empty on a rare quiet date.
-        occasion = "birthday"
-        paintings = birthday_paintings(today.month, today.day)
-        if not paintings:
-            occasion = "random"
-            paintings = get_random_paintings(rng)
-
-        paintings = dedupe_by_artwork(paintings)
-        if not paintings:
+        payload = _build_gallery(today.month, today.day, today.strftime('%B %d'), date_key)
+        if payload is None:
             return jsonify({
                 "status": "error",
                 "error": "No paintings found",
                 "message": "Could not find any paintings in the database",
             }), 404
-
-        rng.shuffle(paintings)
-        items = [{
-            "artwork_id": p["artwork_id"],
-            "creator_id": p["creator_id"],
-            "image": commons_thumb(p["image"]),
-            "birthYear": p.get("birth", "")[:4],
-        } for p in paintings[:MAX_GALLERY]]
-
-        payload = {
-            "status": "success",
-            "occasion": occasion,
-            "today": date_label,
-            "count": len(items),
-            "items": items,
-        }
         with _cache_lock:
             _day_cache["date"] = date_key
             _day_cache["payload"] = payload
-        print(f"Built and cached {len(items)} items for {date_key} (occasion={occasion})")
+        print(f"Built and cached {payload['count']} items for {date_key} (occasion={payload['occasion']})")
         return jsonify(payload)
 
     except requests.exceptions.Timeout:
@@ -322,6 +344,98 @@ def artwork_of_the_day():
             "error": str(e),
             "message": "An unexpected error occurred while fetching artwork",
         }), 500
+
+
+def _resolve_artwork(artwork_qid):
+    """Make a displayable item from an artwork QID (its creator + image)."""
+    query = """
+    SELECT ?creator ?image WHERE {
+      wd:%s wdt:P170 ?creator.
+      OPTIONAL { wd:%s wdt:P18 ?image. }
+    }
+    LIMIT 1
+    """ % (artwork_qid, artwork_qid)
+    rows = run_sparql(query, timeout=25)
+    if not rows:
+        return None
+    creator = qid(rows[0].get("creator", {}).get("value", ""))
+    image = rows[0].get("image", {}).get("value", "")
+    if not (creator and image):  # need both to show the card
+        return None
+    return {"artwork_id": artwork_qid, "creator_id": creator, "image": commons_thumb(image)}
+
+
+def _resolve_artist(artist_qid):
+    """Pick a representative painting (with an image) by an artist QID."""
+    query = """
+    SELECT ?w ?image WHERE {
+      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P18 ?image.
+    }
+    LIMIT 1
+    """ % artist_qid
+    rows = run_sparql(query, timeout=25)
+    if not rows:
+        return None
+    artwork = qid(rows[0].get("w", {}).get("value", ""))
+    image = rows[0].get("image", {}).get("value", "")
+    if not (artwork and image):
+        return None
+    return {"artwork_id": artwork, "creator_id": artist_qid, "image": commons_thumb(image)}
+
+
+@app.route('/resolve', methods=['GET'])
+def resolve():
+    """Explore: turn an artwork OR artist QID into a displayable gallery item.
+    `?artwork=Q…` opens that painting; `?artist=Q…` opens one of their works."""
+    aw = request.args.get('artwork', '')
+    ar = request.args.get('artist', '')
+    if QID_RE.match(aw):
+        key = ("aw", aw)
+    elif QID_RE.match(ar):
+        key = ("ar", ar)
+    else:
+        return jsonify({"status": "error", "message": "Provide a valid artwork or artist id"}), 400
+
+    cached = _resolve_cache.get(key)
+    if cached:
+        return jsonify(cached)
+    try:
+        item = _resolve_artwork(aw) if key[0] == "aw" else _resolve_artist(ar)
+        if not item:
+            return jsonify({"status": "error", "message": "Nothing displayable found"}), 404
+        payload = {"status": "success", "item": item}
+        with _cache_lock:
+            _cache_set(_resolve_cache, key, payload)
+        return jsonify(payload)
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "error", "message": "Wikidata took too long. Try again."}), 504
+    except Exception as e:
+        print(f"Error in resolve: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/surprise', methods=['GET'])
+def surprise():
+    """Explore: a random painting (with image + creator) to jump to."""
+    try:
+        rng = random.Random()
+        for _ in range(3):  # a random offset can land on a thin batch; retry a few times
+            paintings = dedupe_by_artwork(get_random_paintings(rng))
+            paintings = [p for p in paintings if p["artwork_id"] and p["creator_id"] and p["image"]]
+            if paintings:
+                p = rng.choice(paintings)
+                item = {
+                    "artwork_id": p["artwork_id"],
+                    "creator_id": p["creator_id"],
+                    "image": commons_thumb(p["image"]),
+                }
+                return jsonify({"status": "success", "item": item})
+        return jsonify({"status": "error", "message": "Couldn't find a painting — try again"}), 404
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "error", "message": "Wikidata took too long. Try again."}), 504
+    except Exception as e:
+        print(f"Error in surprise: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/artwork-details', methods=['GET'])

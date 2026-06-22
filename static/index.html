@@ -388,9 +388,90 @@
       .site-header {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        gap: 14px;
+        justify-content: space-between;
+        gap: 10px 14px;
+        flex-wrap: wrap;
         margin-bottom: 8px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+      }
+      .ctrl-btn {
+        font-size: 0.86rem;
+        font-weight: 600;
+        color: #fff;
+        background: #1f5b86;
+        border: 1px solid #1f5b86;
+        border-radius: 999px;
+        padding: 6px 14px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .ctrl-btn:hover {
+        background: #16486b;
+      }
+      .ctrl-btn.ghost {
+        color: #1f5b86;
+        background: #fff;
+      }
+      .ctrl-btn.ghost:hover {
+        background: #eaf2f8;
+      }
+      .ctrl-date {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.86rem;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+      .ctrl-date input {
+        font: inherit;
+        padding: 4px 8px;
+        border: 1px solid #c9d6e2;
+        border-radius: 8px;
+        color: #2c3e50;
+      }
+      .explore-link {
+        color: #1f5b86;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        border-bottom: 1px solid #b9d2e6;
+      }
+      .explore-link:hover {
+        border-bottom-color: #1f5b86;
+        background: #eef5fb;
+      }
+      .aotd-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translateX(-50%) translateY(12px);
+        background: #122438;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        font-size: 0.88rem;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 50;
+      }
+      .aotd-toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
       }
       .site-logo {
         width: 48px;
@@ -467,8 +548,19 @@
   <body>
     <div class="container">
       <header class="site-header">
-        <img src="/static/8sprocket.jpg" alt="Sun & Rain Works logo" class="site-logo" />
-        <h1>Artwork of the Day</h1>
+        <div class="brand">
+          <img src="/static/8sprocket.jpg" alt="Sun & Rain Works logo" class="site-logo" />
+          <h1>Artwork of the Day</h1>
+        </div>
+        <div class="controls" id="controls">
+          <button id="btn-back" class="ctrl-btn ghost" style="display: none">&larr; Back</button>
+          <button id="btn-surprise" class="ctrl-btn" title="Jump to a random painting">🎲 Surprise me</button>
+          <label class="ctrl-date" title="Browse paintings for any calendar date">
+            <span>📅 Date</span>
+            <input type="date" id="date-pick" />
+          </label>
+          <button id="btn-today" class="ctrl-btn ghost" title="Back to today's pick">Today</button>
+        </div>
       </header>
       <div id="occasion" class="occasion" style="display: none"></div>
       <div id="content">
@@ -521,6 +613,8 @@
         today: "",
         items: [], // [{artwork_id, creator_id, image, birthYear}]
         index: 0,
+        current: null, // the item currently shown (a day item, or an explored one)
+        stack: [], // explore history (items), for the Back button
         cache: {}, // artwork_id -> { artwork, artist }
         articleCache: {}, // "<artwork_id>:about" -> article payload
         enrichCache: {}, // artwork_id -> enrichment payload
@@ -600,12 +694,13 @@
           state.today = data.today;
           state.items = data.items || [];
           state.index = 0;
-          state.cache = {};
-          state.articleCache = {};
+          state.stack = [];
 
           if (!state.items.length) throw new Error("No artwork found for today");
 
+          state.current = state.items[0];
           updateLoadingProgress(100, "Complete!");
+          updateControls();
           showCurrent();
         } catch (error) {
           console.error("Error:", error);
@@ -651,7 +746,7 @@
           `Summarizing from Wikidata…</div>`;
         try {
           const data = await fetchArticle(item);
-          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          if (!state.current || state.current.artwork_id !== item.artwork_id) return;
           renderArticle(item, data.article);
           loadEnrichment(item, data.article); // progressive: append richer context
         } catch (e) {
@@ -679,7 +774,7 @@
             if (!res.ok || data.status === "error") throw new Error(data.message || "no enrichment");
             state.enrichCache[item.artwork_id] = data;
           }
-          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          if (!state.current || state.current.artwork_id !== item.artwork_id) return;
           renderEnrichment(slot, data.enrichment, baseArticle);
         } catch (e) {
           slot.innerHTML = ""; // optional extra; stay quiet on failure
@@ -750,7 +845,7 @@
             const wholeWord = !/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after);
             const overlaps = matches.some((m) => idx < m.end && end > m.start);
             if (wholeWord && !overlaps) {
-              matches.push({ start: idx, end: end, qid: e.qid });
+              matches.push({ start: idx, end: end, qid: e.qid, open: e.open });
               linked.add(e.qid);
               break; // first occurrence of this entity only
             }
@@ -763,10 +858,21 @@
           pos = 0;
         for (const m of matches) {
           out += esc(text.slice(pos, m.start));
-          out +=
-            `<a class="wd-link" href="https://www.wikidata.org/wiki/${esc(m.qid)}" target="_blank" rel="noopener">` +
-            esc(text.slice(m.start, m.end)) +
-            `</a>`;
+          const inner = esc(text.slice(m.start, m.end));
+          if (m.open === "artwork" || m.open === "artist") {
+            // In-app explore link: open that painting / that artist's work.
+            out +=
+              `<a class="explore-link" role="button" tabindex="0" ` +
+              `data-open="${m.open}" data-qid="${esc(m.qid)}" ` +
+              `title="Open ${m.open === "artwork" ? "this painting" : "this artist"}">` +
+              inner +
+              `</a>`;
+          } else {
+            out +=
+              `<a class="wd-link" href="https://www.wikidata.org/wiki/${esc(m.qid)}" target="_blank" rel="noopener">` +
+              inner +
+              `</a>`;
+          }
           pos = m.end;
         }
         out += esc(text.slice(pos));
@@ -816,13 +922,116 @@
         const n = state.items.length;
         if (!n) return;
         state.index = (state.index + delta + n) % n;
+        state.stack = []; // arrows return you to the daily reel
+        state.current = state.items[state.index];
+        updateControls();
         showCurrent();
+      }
+
+      // ---- Explore: open any artwork / artist as the active view -------------
+      function exploreLoading(label) {
+        document.getElementById("content").innerHTML =
+          `<div class="loading-container"><div class="loading-spinner"></div>` +
+          `<div class="loading-text">Opening ${esc(label || "artwork")}…</div></div>`;
+      }
+
+      async function openExplore(kind, qid, label) {
+        if (!qid) return;
+        const prev = state.current;
+        exploreLoading(label);
+        try {
+          const res = await fetch(`/resolve?${kind}=${encodeURIComponent(qid)}`);
+          const data = await res.json();
+          if (!res.ok || data.status === "error") throw new Error(data.message || "not found");
+          if (prev) state.stack.push(prev);
+          state.current = data.item;
+          updateControls();
+          showCurrent();
+        } catch (e) {
+          // Couldn't open (e.g. no image) — restore the previous view, note it.
+          state.current = prev;
+          showCurrent();
+          toast(e.message === "Nothing displayable found"
+            ? "No image available for that one."
+            : "Couldn't open that — try another.");
+        }
+      }
+
+      function goBack() {
+        if (!state.stack.length) return;
+        state.current = state.stack.pop();
+        updateControls();
+        showCurrent();
+      }
+
+      async function surpriseMe() {
+        const prev = state.current;
+        exploreLoading("a surprise");
+        try {
+          const res = await fetch("/surprise");
+          const data = await res.json();
+          if (!res.ok || data.status === "error") throw new Error(data.message || "no luck");
+          if (prev) state.stack.push(prev);
+          state.current = data.item;
+          updateControls();
+          showCurrent();
+        } catch (e) {
+          state.current = prev;
+          showCurrent();
+          toast("Couldn't find one — try again.");
+        }
+      }
+
+      async function pickDate(month, day) {
+        showLoading("Finding artwork for that date…");
+        try {
+          const res = await fetch(`/artwork-of-the-day?month=${month}&day=${day}`);
+          const data = await res.json();
+          if (!res.ok || data.status === "error") throw new Error(data.message || "no artwork");
+          state.occasion = data.occasion;
+          state.today = data.today;
+          state.items = data.items || [];
+          state.index = 0;
+          state.stack = [];
+          if (!state.items.length) throw new Error("No artwork found for that date");
+          state.current = state.items[0];
+          updateControls();
+          showCurrent();
+        } catch (e) {
+          toast(e.message || "No artwork for that date.");
+          showCurrent();
+        }
+      }
+
+      // Tiny transient toast for soft failures.
+      function toast(msg) {
+        let t = document.getElementById("aotd-toast");
+        if (!t) {
+          t = document.createElement("div");
+          t.id = "aotd-toast";
+          t.className = "aotd-toast";
+          document.body.appendChild(t);
+        }
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.classList.remove("show"), 2600);
+      }
+
+      // Show/hide the Back button and reflect whether we're off the daily reel.
+      function updateControls() {
+        const back = document.getElementById("btn-back");
+        if (back) back.style.display = state.stack.length ? "inline-flex" : "none";
       }
 
       // ---- Render the current artwork ---------------------------------------
       async function showCurrent() {
-        const item = state.items[state.index];
-        const multi = state.items.length > 1;
+        const item = state.current || state.items[state.index];
+        if (!item) return;
+        // On the daily reel (not exploring), arrows cycle the 30; while exploring,
+        // a single item with a Back button instead.
+        const onReel = !state.stack.length && state.items.length > 1;
+        const multi = onReel;
 
         // Advertise this artwork's Linked Art record for machine discovery.
         const laAlt = document.getElementById("la-alt");
@@ -882,7 +1091,7 @@
         try {
           const details = await loadDetails(item);
           // Guard against a fast click changing the index mid-fetch.
-          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          if (!state.current || state.current.artwork_id !== item.artwork_id) return;
           fillDetails(details);
           updateBanner(item, details.artist);
           prefetchNext();
@@ -1007,12 +1216,51 @@
       }
 
       document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && state.stack.length) return goBack();
         if (!state.items.length) return;
         if (e.key === "ArrowLeft") navigate(-1);
         else if (e.key === "ArrowRight") navigate(1);
       });
 
-      document.addEventListener("DOMContentLoaded", fetchArtwork);
+      // Delegated handler: in-app explore links inside the article prose.
+      document.addEventListener("click", (e) => {
+        const link = e.target.closest("[data-open]");
+        if (!link) return;
+        e.preventDefault();
+        openExplore(link.getAttribute("data-open"), link.getAttribute("data-qid"), link.textContent);
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const link = e.target.closest && e.target.closest("[data-open]");
+        if (!link) return;
+        e.preventDefault();
+        openExplore(link.getAttribute("data-open"), link.getAttribute("data-qid"), link.textContent);
+      });
+
+      // Wire the persistent explore toolbar (Back / Surprise / date / Today).
+      function wireControls() {
+        const back = document.getElementById("btn-back");
+        const surprise = document.getElementById("btn-surprise");
+        const today = document.getElementById("btn-today");
+        const dateInput = document.getElementById("date-pick");
+        if (dateInput && !dateInput.value)
+          dateInput.value = new Date().toISOString().slice(0, 10); // default: today
+        if (back) back.addEventListener("click", goBack);
+        if (surprise) surprise.addEventListener("click", surpriseMe);
+        if (today) today.addEventListener("click", fetchArtwork);
+        if (dateInput)
+          dateInput.addEventListener("change", () => {
+            const v = dateInput.value; // YYYY-MM-DD
+            const m = v && v.slice(5, 7),
+              d = v && v.slice(8, 10);
+            if (m && d) pickDate(parseInt(m, 10), parseInt(d, 10));
+          });
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        wireControls();
+        fetchArtwork();
+      });
     </script>
 
     <!-- Add Bootstrap JS dependencies -->

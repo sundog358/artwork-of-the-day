@@ -477,9 +477,10 @@ def artist_works(artist_id, exclude_qid="", limit=8):
     [{qid, label, year}] — for an 'other works by X' line with links."""
     if not QID_RE.match(artist_id):
         return []
+    # Require an image (P18) so every listed work is openable in the explore view.
     query = """
     SELECT ?w ?wLabel (SAMPLE(?d) AS ?date) WHERE {
-      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213.
+      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P18 ?img.
       OPTIONAL { ?w wdt:P571 ?d. }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
@@ -681,12 +682,17 @@ def build_dossier(artwork_id, artist_id):
     # places, institutions, movements, and works.
     link_map = {}
 
-    def _add_entity(label, ent_qid):
+    def _add_entity(label, ent_qid, open_as=None):
+        # open_as: "artist" or "artwork" marks an entity the explore view can open
+        # in-app (the rest just link out to Wikidata).
         if not label or not ent_qid or not QID_RE.match(ent_qid):
             return
         if len(label) < 3 or not any(c.isupper() for c in label):
             return
-        link_map.setdefault(label.lower(), {"label": label, "qid": ent_qid})
+        entry = {"label": label, "qid": ent_qid}
+        if open_as:
+            entry["open"] = open_as
+        link_map.setdefault(label.lower(), entry)
 
     if artwork and artwork.get("title") and artwork["title"] != "Untitled":
         _add_entity(artwork["title"], artwork_id)
@@ -697,10 +703,12 @@ def build_dossier(artwork_id, artist_id):
     for key in ("depicts", "collection", "movementLinks", "influencedBy",
                 "artistMovement", "nationality", "occupation", "notableWork",
                 "education", "teacher", "student", "genre", "award", "memberOf"):
+        # Influences and teachers/students are artists → openable in the explore view.
+        open_as = "artist" if key in ("influencedBy", "teacher", "student") else None
         for e in nb.get(key, [])[:10]:
-            _add_entity(e.get("label"), e.get("qid"))
+            _add_entity(e.get("label"), e.get("qid"), open_as)
     for e in (artist.get("contemporaries") if artist else []) or []:
-        _add_entity(e.get("label"), e.get("qid"))
+        _add_entity(e.get("label"), e.get("qid"), "artist")
 
     # Longest label first so multi-word names win over substrings when matching.
     entities = sorted(link_map.values(), key=lambda x: len(x["label"]), reverse=True)
