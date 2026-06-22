@@ -39,6 +39,7 @@ _load_dotenv()
 import article_writer  # noqa: E402  (imported after .env is loaded)
 import sparql_library  # noqa: E402
 import linked_art  # noqa: E402
+import enrichment  # noqa: E402
 
 QID_RE = re.compile(r'^Q\d+$')
 
@@ -118,6 +119,7 @@ _cache_lock = threading.Lock()
 _day_cache = {"date": None, "payload": None}  # single entry; no cap needed
 _details_cache = OrderedDict()
 _article_cache = OrderedDict()
+_enrichment_cache = OrderedDict()  # progressive enrichment payloads
 _la_cache = OrderedDict()  # Linked Art records: (kind, qid) -> record dict
 
 
@@ -398,6 +400,49 @@ def artwork_article():
         }), 504
     except Exception as e:
         print(f"Error in artwork_article: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/artwork-enrichment', methods=['GET'])
+def artwork_enrichment():
+    """Progressive enrichment layers (Wikipedia overview, other works, extra
+    artwork facts, period/place framing) for the About panel. Fetched by the
+    frontend AFTER the base article renders, so first paint stays fast. Cached
+    per artwork for the process lifetime; reuses the warm details dossier."""
+    artwork_id = request.args.get('artwork', '')
+    artist_id = request.args.get('artist', '')
+
+    if not QID_RE.match(artwork_id) or not QID_RE.match(artist_id):
+        return jsonify({
+            "status": "error",
+            "message": "Invalid or missing artwork/artist id",
+        }), 400
+
+    cache_key = (artwork_id, artist_id)
+    cached = _enrichment_cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    try:
+        details = _details_cache.get((artwork_id, artist_id))
+        if details:
+            artwork = details.get("artwork") or {}
+            artist = details.get("artist") or {}
+        else:
+            artwork, artist = gather_details(artwork_id, artist_id)
+
+        data = enrichment.build(artwork_id, artist_id, artwork, artist)
+        payload = {"status": "success", "enrichment": data}
+        with _cache_lock:
+            _cache_set(_enrichment_cache, cache_key, payload)
+        return jsonify(payload)
+    except requests.exceptions.Timeout:
+        return jsonify({
+            "status": "error",
+            "message": "A source took too long to respond. Please try again.",
+        }), 504
+    except Exception as e:
+        print(f"Error in artwork_enrichment: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

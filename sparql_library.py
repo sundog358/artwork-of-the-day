@@ -58,12 +58,19 @@ def commons_thumb(image_url, width=800):
 
 
 def format_date(date_str):
-    """Format an ISO date string into a human-readable date."""
+    """Format an ISO date string into a human-readable date.
+
+    Wikidata stores year-only precision as ``YYYY-01-01``; render that as just the
+    year rather than a misleading "January 01" (genuine 1 January dates are rare
+    and indistinguishable in this representation)."""
     if not date_str:
         return "Unknown"
     try:
         from datetime import datetime
-        return datetime.fromisoformat(date_str.replace("Z", "+00:00")).strftime("%B %d, %Y")
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if dt.month == 1 and dt.day == 1:
+            return str(dt.year)
+        return dt.strftime("%B %d, %Y")
     except Exception:
         return date_str
 
@@ -437,6 +444,91 @@ def contemporaries(movement_qids, birth_year, exclude_qid, span=15, limit=6):
         if ent and label and not QID_RE.match(label) and ent not in seen:
             seen.add(ent)
             out.append({"qid": ent, "label": label, "description": _v(r, "artistDescription")})
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Enrichment layers (progressive — fetched after the base article renders)     #
+# --------------------------------------------------------------------------- #
+def wikipedia_sitelink(qid, lang="en"):
+    """Return the Wikipedia article title for an entity (or '' if none)."""
+    if not QID_RE.match(qid):
+        return ""
+    query = """
+    SELECT ?article WHERE {
+      ?article schema:about wd:%s;
+               schema:isPartOf <https://%s.wikipedia.org/>.
+    }
+    LIMIT 1
+    """ % (qid, lang)
+    try:
+        rows = run_sparql(query, timeout=20)
+    except Exception as e:
+        print(f"wikipedia_sitelink error: {e}")
+        return ""
+    if not rows:
+        return ""
+    url = _v(rows[0], "article")
+    return url.rsplit("/wiki/", 1)[-1] if "/wiki/" in url else ""
+
+
+def artist_works(artist_id, exclude_qid="", limit=8):
+    """Other paintings by this artist (P170), most-documented first. Returns
+    [{qid, label, year}] — for an 'other works by X' line with links."""
+    if not QID_RE.match(artist_id):
+        return []
+    query = """
+    SELECT ?w ?wLabel (SAMPLE(?d) AS ?date) WHERE {
+      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213.
+      OPTIONAL { ?w wdt:P571 ?d. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?w ?wLabel
+    LIMIT 40
+    """ % artist_id
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"artist_works error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        q = qid(_v(r, "w"))
+        label = _v(r, "wLabel")
+        if not q or q == exclude_qid or q in seen or not label or QID_RE.match(label):
+            continue
+        seen.add(q)
+        year = _v(r, "date")[:4]
+        out.append({"qid": q, "label": label, "year": year if year.isdigit() else ""})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def artwork_context(artwork_id):
+    """Extra, often-sparse artwork context: exhibition history (P608), the events
+    it commemorates/depicts (P793), and its art movement (P135). One VALUES query;
+    returns {exhibitions, events, movements} as label lists."""
+    out = {"exhibitions": [], "events": [], "movements": []}
+    if not QID_RE.match(artwork_id):
+        return out
+    query = """
+    SELECT ?rel ?vLabel WHERE {
+      VALUES (?rel ?p) { ("exhibitions" wdt:P608) ("events" wdt:P793) ("movements" wdt:P135) }
+      wd:%s ?p ?v.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 100
+    """ % artwork_id
+    try:
+        rows = run_sparql(query, timeout=25)
+    except Exception as e:
+        print(f"artwork_context error: {e}")
+        return out
+    for r in rows:
+        rel, label = _v(r, "rel"), _v(r, "vLabel")
+        if rel in out and label and not QID_RE.match(label) and label not in out[rel]:
+            out[rel].append(label)
     return out
 
 

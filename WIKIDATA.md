@@ -340,6 +340,16 @@ context* (contemporaries). Named entities are linked to Wikidata in the prose vi
 the dossier's `_link_entities` map. The frontend tags the result **📋 From
 Wikidata**.
 
+**Progressive enrichment** ([enrichment.py](enrichment.py), `GET
+/artwork-enrichment`). After the base article paints, the frontend fetches
+heavier, source-diverse layers and appends them: (1) the **Wikipedia** lead
+summary for the artist (always) and the artwork (when it has a page) — attributed
+**CC BY-SA** and linked; (2) **other works** by the artist (`P170`, linkable);
+(3) richer artwork facts — exhibition history (`P608`), commemorated events
+(`P793`), movement (`P135`); (4) **period & place** framing — the era derived
+from the creation year plus glosses for the genre and the artist's birth/death
+places. Cached per artwork; reuses the warm `/artwork-details` dossier.
+
 ## 6. One-hop neighbourhood (Phase 2 — implemented)
 
 Adds depth from Wikidata (no extra model cost). `gather_details()` in

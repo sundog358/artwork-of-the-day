@@ -152,6 +152,16 @@
         color: #6b7c8c;
         margin: 12px 0 4px;
       }
+      .aotd-sources {
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #ece3d0;
+        font-size: 0.8rem;
+        color: #8a99a6;
+      }
+      .aotd-sources .src-note {
+        color: #a9b4bd;
+      }
       .aotd-about .wd-link {
         color: #2c5d8a;
         text-decoration: none;
@@ -442,7 +452,8 @@
         items: [], // [{artwork_id, creator_id, image, birthYear}]
         index: 0,
         cache: {}, // artwork_id -> { artwork, artist }
-        articleCache: {}, // "<artwork_id>:sum|gen" -> article payload
+        articleCache: {}, // "<artwork_id>:about" -> article payload
+        enrichCache: {}, // artwork_id -> enrichment payload
       };
 
       function esc(s) {
@@ -565,9 +576,71 @@
           const data = await fetchArticle(item);
           if (state.items[state.index].artwork_id !== item.artwork_id) return;
           renderArticle(item, data.article);
+          loadEnrichment(item, data.article); // progressive: append richer context
         } catch (e) {
           el.innerHTML = ""; // article is a nice-to-have; stay quiet on failure
         }
+      }
+
+      // Progressive enrichment: fetch the heavier layers (Wikipedia overview,
+      // other works, exhibitions, period/place) and append them below the base
+      // article. Fails quiet — the base article already stands on its own.
+      async function loadEnrichment(item, baseArticle) {
+        const slot = document.getElementById("aotd-enrich");
+        if (!slot) return;
+        slot.innerHTML =
+          `<div class="mini-loading"><div class="loading-spinner small"></div>` +
+          `Gathering more context…</div>`;
+        try {
+          let data = state.enrichCache[item.artwork_id];
+          if (!data) {
+            const url =
+              `/artwork-enrichment?artwork=${encodeURIComponent(item.artwork_id)}` +
+              `&artist=${encodeURIComponent(item.creator_id)}`;
+            const res = await fetch(url);
+            data = await res.json();
+            if (!res.ok || data.status === "error") throw new Error(data.message || "no enrichment");
+            state.enrichCache[item.artwork_id] = data;
+          }
+          if (state.items[state.index].artwork_id !== item.artwork_id) return;
+          renderEnrichment(slot, data.enrichment, baseArticle);
+        } catch (e) {
+          slot.innerHTML = ""; // optional extra; stay quiet on failure
+        }
+      }
+
+      function renderEnrichment(slot, enr, baseArticle) {
+        const sections = (enr && enr.sections) || [];
+        if (!sections.length) {
+          slot.innerHTML = "";
+          return;
+        }
+        // Link entities from BOTH the base article and the enrichment (e.g. the
+        // "other works" titles), longest label first, first occurrence each.
+        const entities = ((baseArticle && baseArticle.entities) || [])
+          .concat((enr && enr.entities) || [])
+          .slice()
+          .sort((a, b) => (b.label || "").length - (a.label || "").length);
+        const linked = new Set();
+        const body = sections
+          .map((s) => {
+            const h = s.heading ? `<h4 class="aotd-sec">${esc(s.heading)}</h4>` : "";
+            const paras = (s.paragraphs || [])
+              .map((p) => `<p>${linkifyText(p, entities, linked)}</p>`)
+              .join("");
+            return h + paras;
+          })
+          .join("");
+        const sources = (enr.sources || [])
+          .map(
+            (s) =>
+              `<a class="wd-link" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`
+          )
+          .join(" · ");
+        const credit = sources
+          ? `<p class="aotd-sources">Sources: ${sources} <span class="src-note">(Wikipedia text: CC BY-SA)</span></p>`
+          : "";
+        slot.innerHTML = body + credit;
       }
 
       // Wrap known entity labels in the text with links to Wikidata. Uses plain
@@ -642,7 +715,9 @@
             return h + paras;
           })
           .join("");
-        el.innerHTML = `<h3><i class="fas fa-feather"></i> About ${tag}</h3>${body}`;
+        el.innerHTML =
+          `<h3><i class="fas fa-feather"></i> About ${tag}</h3>${body}` +
+          `<div id="aotd-enrich"></div>`;
       }
 
       function prefetchNext() {
