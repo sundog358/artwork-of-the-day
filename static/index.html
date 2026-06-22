@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Artwork of the Day</title>
+    <title>Meta History Book — Artwork of the Day</title>
     <meta
       name="description"
-      content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
+      content="Art in history, and history in art. A daily painting by an artist born on this date — and the meta art history it opens into, drawn live from Wikidata."
     />
     <link rel="icon" type="image/jpeg" href="/static/8sprocket.jpg" />
     <link rel="canonical" href="https://metahistorybook.com/" />
@@ -15,21 +15,21 @@
     <!-- Open Graph / Twitter — defaults; updated per artwork by the frontend so
          a shared link previews the actual painting. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Artwork of the Day" />
-    <meta id="og-title" property="og:title" content="Artwork of the Day" />
+    <meta property="og:site_name" content="Meta History Book" />
+    <meta id="og-title" property="og:title" content="Meta History Book — Artwork of the Day" />
     <meta
       id="og-desc"
       property="og:description"
-      content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
+      content="Art in history, and history in art. A daily painting by an artist born on this date — and the meta art history it opens into, drawn live from Wikidata."
     />
     <meta id="og-image" property="og:image" content="https://metahistorybook.com/static/8sprocket.jpg" />
     <meta property="og:url" content="https://metahistorybook.com/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta id="tw-title" name="twitter:title" content="Artwork of the Day" />
+    <meta id="tw-title" name="twitter:title" content="Meta History Book — Artwork of the Day" />
     <meta
       id="tw-desc"
       name="twitter:description"
-      content="A different painting every day, by an artist born on this date."
+      content="Art in history, and history in art — a daily painting and the meta art history it opens into."
     />
     <meta id="tw-image" name="twitter:image" content="https://metahistorybook.com/static/8sprocket.jpg" />
 
@@ -476,6 +476,36 @@
         align-items: center;
         gap: 14px;
       }
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+      .brand-text h1 {
+        margin: 0;
+        line-height: 1.05;
+      }
+      .brand-eyebrow {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #1f5b86;
+      }
+      .brand-tagline {
+        margin: 3px 0 0;
+        font-size: 0.82rem;
+        font-style: italic;
+        color: #5a6b7a;
+        max-width: 56ch;
+      }
+      body.gallery .brand-eyebrow {
+        color: #8fb7d9;
+      }
+      body.gallery .brand-tagline {
+        color: #9fb0c0;
+      }
       .controls {
         display: flex;
         align-items: center;
@@ -723,8 +753,12 @@
     <div class="container">
       <header class="site-header">
         <div class="brand">
-          <img src="/static/8sprocket.jpg" alt="Sun & Rain Works logo" class="site-logo" />
-          <h1>Artwork of the Day</h1>
+          <img src="/static/8sprocket.jpg" alt="Meta History Book logo" class="site-logo" />
+          <div class="brand-text">
+            <span class="brand-eyebrow">Meta History Book</span>
+            <h1>Artwork of the Day</h1>
+            <p class="brand-tagline">Art in history, and history in art — explore meta art history.</p>
+          </div>
         </div>
         <div class="controls" id="controls">
           <button id="btn-back" class="ctrl-btn ghost" style="display: none">&larr; Back</button>
@@ -1325,7 +1359,7 @@
           artwork.creationDate && artwork.creationDate !== "Unknown"
             ? ` (${artwork.creationDate})`
             : "";
-        const pageTitle = (name ? `${title} — ${name}` : title) + " · Artwork of the Day";
+        const pageTitle = (name ? `${title} — ${name}` : title) + " · Meta History Book";
         const desc = `${title}${name ? " by " + name : ""}${dated} — a painting of the day, drawn live from Wikidata.`;
         document.title = pageTitle;
         const set = (id, attr, val) => {
