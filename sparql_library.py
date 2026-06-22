@@ -757,7 +757,7 @@ def notable_by_property(seed_qids, pid, exclude="", limit=6, painter_only=False,
     return out
 
 
-def genre_peers(genre_qids, nationality_qid, exclude="", limit=6, min_links=4):
+def genre_peers(genre_qids, nationality_qid, exclude="", limit=6, min_links=8):
     """Notable painters who share the artwork's genre AND the artist's nationality,
     ranked by notability — 'American portraitists like Sargent, Whistler…'. The
     nationality constraint keeps it relevant (not just the most famous painters of
