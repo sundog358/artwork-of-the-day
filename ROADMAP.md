@@ -101,10 +101,13 @@ Each is self-contained and screenshot-friendly.
 
 ## 🔭 Engineering & quality
 
-- 🔭 **Broaden test coverage** beyond the parsers — a Flask test-client suite for
-  the routes and an end-to-end enrichment test (mocked HTTP).
-- 🔭 **Expand typing** — extend `mypy` coverage across `sparql_library` and
-  `enrichment`, not just the two typed modules.
+- ✅ **Route-level test coverage** — a Flask test-client suite exercising every
+  route (assembly, headers, content negotiation, error paths) with the data layer
+  mocked ([tests/test_routes.py](tests/test_routes.py)); 57 tests total.
+- ✅ **Codebase-wide typing** — `mypy` now type-checks all 8 first-party modules
+  (`app`, `sparql_library`, `enrichment`, `linked_art`, `iiif`, …), not just a few.
+- 💡 **End-to-end enrichment test** — exercise the full parallel enrichment build
+  against mocked HTTP, asserting graceful degradation when a query fails.
 - 💡 **Multi-instance ready** — Redis-backed rate-limit storage and shared cache
   (the code already reads `AOTD_RATELIMIT_STORAGE`).
 - 💡 **Observability** — structured logging and basic error tracking in place of
