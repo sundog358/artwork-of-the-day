@@ -23,11 +23,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Syntax-check every module
-        run: git ls-files '*.py' | xargs python -m py_compile
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Type-check (mypy)
+        run: mypy
 
       - name: Import smoke-test the app
         run: python -c "import app, serve, enrichment, sparql_library, wikidata_facts, wikibase_rest"
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests with coverage
+        run: pytest -q --cov=wikidata_facts --cov=wikibase_rest --cov=article_writer --cov=sparql_library --cov-report=term-missing

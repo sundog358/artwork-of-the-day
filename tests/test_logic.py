@@ -6,6 +6,8 @@ small SPARQL value helpers. These are exactly the functions whose correctness
 the article's trustworthiness depends on, and they're all pure, so they test
 cleanly without hitting any API.
 """
+
+import article_writer as AW
 import enrichment as E
 import sparql_library as S
 import wikibase_rest as WR
@@ -25,10 +27,12 @@ def test_narrate_uses_registry_template():
 
 
 def test_narrate_collapses_multivalued_property():
-    out = WF.narrate([
-        _st("P186", "made from material", "oil paint"),
-        _st("P186", "made from material", "poplar panel"),
-    ])
+    out = WF.narrate(
+        [
+            _st("P186", "made from material", "oil paint"),
+            _st("P186", "made from material", "poplar panel"),
+        ]
+    )
     assert out == ["Painted in oil paint and poplar panel."]
 
 
@@ -47,10 +51,12 @@ def test_narrate_respects_caller_skip():
 
 
 def test_narrate_orders_by_priority():
-    out = WF.narrate([
-        _st("P6216", "copyright status", "public domain"),  # priority 40
-        _st("P186", "made from material", "oil paint"),      # priority 10
-    ])
+    out = WF.narrate(
+        [
+            _st("P6216", "copyright status", "public domain"),  # priority 40
+            _st("P186", "made from material", "oil paint"),  # priority 10
+        ]
+    )
     assert out[0].startswith("Painted in")  # lower priority number sorts first
 
 
@@ -105,8 +111,13 @@ def test_a_or_an():
 
 
 def test_phrase_card_prefers_description_with_years():
-    card = {"label": "HMS Fox", "description": "sixth-rate frigate",
-            "birth": "1773-01-01", "death": "", "type": "ship"}
+    card = {
+        "label": "HMS Fox",
+        "description": "sixth-rate frigate",
+        "birth": "1773-01-01",
+        "death": "",
+        "type": "ship",
+    }
     assert E._phrase_card(card) == "HMS Fox (sixth-rate frigate, b. 1773)"
 
 
@@ -138,3 +149,40 @@ def test_commons_thumb_builds_https_thumbnail():
     url = S.commons_thumb("http://commons.wikimedia.org/wiki/Special:FilePath/Foo.jpg")
     assert url.startswith("https://")
     assert "width=800" in url
+
+
+# --------------------------------------------------------------------------- #
+# article_writer — the deterministic base article (pure, no network)          #
+# --------------------------------------------------------------------------- #
+def test_article_build_assembles_grounded_sections():
+    artwork = {
+        "title": "Woman with Book",
+        "creationDate": "1910",
+        "medium": "oil paint",
+        "inventory": "1981.16",
+        "location": "New Britain Museum of American Art",
+        "_link_entities": [],
+    }
+    artist = {
+        "name": "William McGregor Paxton",
+        "description": "American artist",
+        "birthdate": "June 22, 1869",
+        "birthplace": "Baltimore",
+        "education": "Académie Julian",
+        "teachers": "Jean-Léon Gérôme",
+    }
+    out = AW.build(artwork, artist)
+    headings = [s["heading"] for s in out["sections"]]
+    assert out["mode"] == "wikidata"
+    assert "The painting" in headings and "The artist" in headings
+    paint = next(s for s in out["sections"] if s["heading"] == "The painting")
+    assert paint["paragraphs"][0].startswith(
+        "Woman with Book is a painting by William McGregor Paxton"
+    )
+
+
+def test_article_build_handles_empty_dossier():
+    out = AW.build({"title": "Untitled"}, {})
+    # Never crashes; title falls back and at least one section is produced.
+    assert out["title"] == "This artwork"
+    assert out["sections"]

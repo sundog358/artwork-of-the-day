@@ -9,8 +9,34 @@
       content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
     />
     <link rel="icon" type="image/jpeg" href="/static/8sprocket.jpg" />
+    <link rel="canonical" href="https://metahistorybook.com/" />
+    <meta name="theme-color" content="#122438" />
+
+    <!-- Open Graph / Twitter — defaults; updated per artwork by the frontend so
+         a shared link previews the actual painting. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Artwork of the Day" />
+    <meta id="og-title" property="og:title" content="Artwork of the Day" />
+    <meta
+      id="og-desc"
+      property="og:description"
+      content="A different painting every day, by an artist born on this date — drawn live from Wikidata."
+    />
+    <meta id="og-image" property="og:image" content="https://metahistorybook.com/static/8sprocket.jpg" />
+    <meta property="og:url" content="https://metahistorybook.com/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta id="tw-title" name="twitter:title" content="Artwork of the Day" />
+    <meta
+      id="tw-desc"
+      name="twitter:description"
+      content="A different painting every day, by an artist born on this date."
+    />
+    <meta id="tw-image" name="twitter:image" content="https://metahistorybook.com/static/8sprocket.jpg" />
+
     <!-- Linked Art (https://linked.art) record for the current artwork; href set per item. -->
     <link rel="alternate" id="la-alt" type="application/ld+json" href="" />
+    <!-- schema.org VisualArtwork for the current artwork; injected per item. -->
+    <script type="application/ld+json" id="schema-artwork">{}</script>
     <!-- Add Bootstrap and FontAwesome like openartbrowser -->
     <link
       rel="stylesheet"
@@ -528,6 +554,21 @@
         font-size: 0.86rem;
         line-height: 1.55;
         margin-top: 6px;
+      }
+
+      /* ---- Accessibility: visible keyboard focus -------------------------- */
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      [role="button"]:focus-visible {
+        outline: 2px solid #1f5b86;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+      body.gallery a:focus-visible,
+      body.gallery button:focus-visible,
+      body.gallery [role="button"]:focus-visible {
+        outline-color: #86c0ec;
       }
 
       /* ---- Gallery (dark) mode: paintings on a museum wall ---------------- */
@@ -1127,7 +1168,7 @@
         document.getElementById("content").innerHTML = `
           <div class="artwork">
             <div class="img-container">
-              <img src="${esc(item.image)}" class="artwork-image" alt="Artwork"/>
+              <img src="${esc(item.image)}" class="artwork-image" alt="Painting of the day"/>
               ${
                 multi
                   ? `<button class="nav-arrow prev" aria-label="Previous artwork">&#10094;</button>
@@ -1216,6 +1257,45 @@
           : "";
         document.getElementById("aotd-artist").innerHTML = artistSectionHTML(artist);
         document.getElementById("aotd-artwork").innerHTML = artworkSectionHTML(artwork);
+        updateMeta(artwork, artist, name);
+      }
+
+      // SEO/social: per-artwork page title, Open Graph / Twitter tags (so a
+      // shared link previews the actual painting), descriptive image alt text,
+      // and a schema.org/VisualArtwork JSON-LD block.
+      function updateMeta(artwork, artist, name) {
+        const title = artwork.title || "Untitled";
+        const img = state.current && state.current.image;
+        const imgEl = document.querySelector(".artwork-image");
+        if (imgEl) imgEl.alt = name ? `${title}, by ${name}` : title;
+
+        const dated =
+          artwork.creationDate && artwork.creationDate !== "Unknown"
+            ? ` (${artwork.creationDate})`
+            : "";
+        const pageTitle = (name ? `${title} — ${name}` : title) + " · Artwork of the Day";
+        const desc = `${title}${name ? " by " + name : ""}${dated} — a painting of the day, drawn live from Wikidata.`;
+        document.title = pageTitle;
+        const set = (id, attr, val) => {
+          const el = document.getElementById(id);
+          if (el) el.setAttribute(attr, val);
+        };
+        set("og-title", "content", pageTitle);
+        set("tw-title", "content", pageTitle);
+        set("og-desc", "content", desc);
+        set("tw-desc", "content", desc);
+        if (img) {
+          set("og-image", "content", img);
+          set("tw-image", "content", img);
+        }
+
+        const schema = { "@context": "https://schema.org", "@type": "VisualArtwork", name: title };
+        if (name) schema.creator = { "@type": "Person", name };
+        if (img) schema.image = img;
+        if (dated) schema.dateCreated = artwork.creationDate;
+        if (artwork.medium && artwork.medium !== "Unknown") schema.artMedium = artwork.medium;
+        const s = document.getElementById("schema-artwork");
+        if (s) s.textContent = JSON.stringify(schema);
       }
 
       function updateBanner(item, artist) {
@@ -1340,7 +1420,10 @@
         const themeBtn = document.getElementById("btn-theme");
         const applyTheme = (on) => {
           document.body.classList.toggle("gallery", on);
-          if (themeBtn) themeBtn.textContent = on ? "☀️" : "🌙";
+          if (themeBtn) {
+            themeBtn.textContent = on ? "☀️" : "🌙";
+            themeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+          }
         };
         applyTheme(localStorage.getItem("aotd-theme") === "gallery");
         if (themeBtn)

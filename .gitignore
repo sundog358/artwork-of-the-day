@@ -26,3 +26,7 @@ fastapidocker/
 # OS
 .DS_Store
 Thumbs.db
+
+# Coverage data
+.coverage
+htmlcov/

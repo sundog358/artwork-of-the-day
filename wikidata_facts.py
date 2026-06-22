@@ -14,6 +14,7 @@ Quality control:
   - everything else non-ID renders with a safe generic fallback ("Its {prop}: {v}").
 Add a fact type = add one REGISTRY line. As Wikidata grows, the prose grows.
 """
+
 import re
 
 import sparql_library as S
@@ -37,64 +38,97 @@ def _and_list(labels):
 # fits (P186 only occurs on works, P166 only on people, etc.).
 REGISTRY = {
     # --- artwork: the work itself ---
-    "P186": ("Painted in {v}", 10),            # made from material
-    "P88": ("Commissioned by {v}", 12),        # commissioned by
-    "P1071": ("Made in {v}", 14),              # location of creation
-    "P495": ("Originating from {v}", 16),      # country of origin
-    "P179": ("Part of the series {v}", 18),    # part of the series
-    "P144": ("Based on {v}", 20),              # based on
-    "P941": ("Inspired by {v}", 21),           # inspired by
-    "P921": ("Its main subject is {v}", 22),   # main subject
-    "P135": ("In the {v} style", 24),          # movement
+    "P186": ("Painted in {v}", 10),  # made from material
+    "P88": ("Commissioned by {v}", 12),  # commissioned by
+    "P1071": ("Made in {v}", 14),  # location of creation
+    "P495": ("Originating from {v}", 16),  # country of origin
+    "P179": ("Part of the series {v}", 18),  # part of the series
+    "P144": ("Based on {v}", 20),  # based on
+    "P941": ("Inspired by {v}", 21),  # inspired by
+    "P921": ("Its main subject is {v}", 22),  # main subject
+    "P135": ("In the {v} style", 24),  # movement
     # --- artwork: history & provenance ---
-    "P793": ("It has witnessed {v}", 30),      # significant event (theft, vandalism…)
+    "P793": ("It has witnessed {v}", 30),  # significant event (theft, vandalism…)
     "P608": ("Shown in exhibitions including {v}", 32),  # exhibition history
-    "P127": ("Owned by {v}", 34),              # owned by
+    "P127": ("Owned by {v}", 34),  # owned by
     "P6216": ("Its copyright status is {v}", 40),  # copyright status
-    "P1268": ("Represents {v}", 41),           # represents
+    "P1268": ("Represents {v}", 41),  # represents
     # --- person: the artist ---
-    "P166": ("Awarded {v}", 50),               # award received
-    "P463": ("A member of {v}", 52),           # member of
-    "P39": ("Held the position of {v}", 54),   # position held
+    "P166": ("Awarded {v}", 50),  # award received
+    "P463": ("A member of {v}", 52),  # member of
+    "P39": ("Held the position of {v}", 54),  # position held
     "P101": ("Working in the field of {v}", 56),  # field of work
-    "P800": ("Noted for {v}", 58),             # notable work
-    "P937": ("Active in {v}", 60),             # work location
-    "P551": ("Resident in {v}", 62),           # residence
-    "P1344": ("A participant in {v}", 63),     # participant in
-    "P140": ("Worldview: {v}", 64),            # religion or worldview
-    "P1412": ("Spoke {v}", 66),                # languages spoken/written
-    "P53": ("Of the {v} family", 67),          # family
+    "P800": ("Noted for {v}", 58),  # notable work
+    "P937": ("Active in {v}", 60),  # work location
+    "P551": ("Resident in {v}", 62),  # residence
+    "P1344": ("A participant in {v}", 63),  # participant in
+    "P140": ("Worldview: {v}", 64),  # religion or worldview
+    "P1412": ("Spoke {v}", 66),  # languages spoken/written
+    "P53": ("Of the {v} family", 67),  # family
     # --- place / organisation ---
-    "P1376": ("The capital of {v}", 70),       # capital of
-    "P159": ("Headquartered in {v}", 72),      # headquarters location
-    "P138": ("Named after {v}", 74),           # named after
-    "P112": ("Founded by {v}", 76),            # founded by
-    "P131": ("Located in {v}", 90),            # admin territorial entity
+    "P1376": ("The capital of {v}", 70),  # capital of
+    "P159": ("Headquartered in {v}", 72),  # headquarters location
+    "P138": ("Named after {v}", 74),  # named after
+    "P112": ("Founded by {v}", 76),  # founded by
+    "P131": ("Located in {v}", 90),  # admin territorial entity
 }
 
 # Wikimedia-meta / redundant noise to hide (the external IDs are already gone).
 DENY = {
-    "P31",    # instance of (we already frame the type)
-    "P528",   # catalog code
-    "P217",   # inventory number (shown elsewhere)
+    "P31",  # instance of (we already frame the type)
+    "P528",  # catalog code
+    "P217",  # inventory number (shown elsewhere)
     "P1545",  # series ordinal
-    "P2561", "P1448", "P1449", "P1813", "P1705",  # name / official name / nickname / short name
-    "P460", "P1889",  # said to be the same as / different from
-    "P5008", "P6104",  # on focus list of / maintained by WikiProject
-    "P21",    # sex or gender (not relevant context here)
-    "P1424", "P910", "P1151", "P935", "P1472", "P1612",  # topic's main template/category/portal/Commons pages
+    "P2561",
+    "P1448",
+    "P1449",
+    "P1813",
+    "P1705",  # name / official name / nickname / short name
+    "P460",
+    "P1889",  # said to be the same as / different from
+    "P5008",
+    "P6104",  # on focus list of / maintained by WikiProject
+    "P21",  # sex or gender (not relevant context here)
+    "P1424",
+    "P910",
+    "P1151",
+    "P935",
+    "P1472",
+    "P1612",  # topic's main template/category/portal/Commons pages
     "P3342",  # significant person (often noise on places/orgs)
-    "P18", "P94", "P158", "P237", "P163",  # image / coat of arms / seal / flag (media-ish)
-    "P373",   # Commons category (handled as a link)
-    "P1687", "P1659", "P1855",  # Wikidata-property meta
-    "P1830", "P527", "P2670",  # owner of / has part(s) (verbose, not about this entity)
+    "P18",
+    "P94",
+    "P158",
+    "P237",
+    "P163",  # image / coat of arms / seal / flag (media-ish)
+    "P373",  # Commons category (handled as a link)
+    "P1687",
+    "P1659",
+    "P1855",  # Wikidata-property meta
+    "P1830",
+    "P527",
+    "P2670",  # owner of / has part(s) (verbose, not about this entity)
     "P1343",  # described by source (mostly old-encyclopedia cruft)
-    "P1476", "P735", "P734", "P742",  # title / given name / family name / pseudonym (noise)
+    "P1476",
+    "P735",
+    "P734",
+    "P742",  # title / given name / family name / pseudonym (noise)
     "P6886",  # writing language (redundant with languages spoken)
-    "P509", "P1196", "P157", "P1347",  # cause/manner of death, killed by (morbid, not artistic)
+    "P509",
+    "P1196",
+    "P157",
+    "P1347",  # cause/manner of death, killed by (morbid, not artistic)
     "P6379",  # has works in the collection (we cover collections elsewhere)
-    "P170", "P276", "P195", "P180", "P571", "P136",  # core facts already in the base article
-    "P2048", "P2049", "P2067", "P1083",  # raw dimensions/mass/capacity (no unit here)
+    "P170",
+    "P276",
+    "P195",
+    "P180",
+    "P571",
+    "P136",  # core facts already in the base article
+    "P2048",
+    "P2049",
+    "P2067",
+    "P1083",  # raw dimensions/mass/capacity (no unit here)
 }
 
 
@@ -107,7 +141,8 @@ def statements_for(qids):
     if not valid:
         return out
     values = " ".join(f"wd:{q}" for q in valid)
-    query = """
+    query = (
+        """
     SELECT ?subj ?prop ?propLabel ?v ?vLabel WHERE {
       VALUES ?subj { %s }
       ?subj ?pd ?v.
@@ -117,7 +152,9 @@ def statements_for(qids):
       OPTIONAL { ?v rdfs:label ?vl. FILTER(LANG(?vl) = "en") }
       BIND(COALESCE(?vl, STR(?v)) AS ?vLabel)
     }
-    """ % values
+    """
+        % values
+    )
     try:
         rows = S.run_sparql(query, timeout=40)
     except Exception as e:
@@ -130,12 +167,14 @@ def statements_for(qids):
         prop_uri = r.get("prop", {}).get("value", "")
         pid = prop_uri.rsplit("/", 1)[-1]
         vraw = r.get("v", {}).get("value", "")
-        out[subj].append({
-            "pid": pid,
-            "prop": r.get("propLabel", {}).get("value", ""),
-            "value": r.get("vLabel", {}).get("value", ""),
-            "vqid": S.qid(vraw) if "/entity/Q" in vraw else "",
-        })
+        out[subj].append(
+            {
+                "pid": pid,
+                "prop": r.get("propLabel", {}).get("value", ""),
+                "value": r.get("vLabel", {}).get("value", ""),
+                "vqid": S.qid(vraw) if "/entity/Q" in vraw else "",
+            }
+        )
     return out
 
 

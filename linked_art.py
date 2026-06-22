@@ -29,8 +29,14 @@ _AAT = "http://vocab.getty.edu/aat/"
 
 
 def _clean(v):
-    return "" if (not v or v in ("Unknown", "Untitled", "Unknown artist",
-                                 "Unknown place", "Unknown group")) else str(v)
+    return (
+        ""
+        if (
+            not v
+            or v in ("Unknown", "Untitled", "Unknown artist", "Unknown place", "Unknown group")
+        )
+        else str(v)
+    )
 
 
 def _wd(qid):
@@ -38,6 +44,7 @@ def _wd(qid):
 
 
 # --- value objects ---------------------------------------------------------- #
+
 
 def _concept(uri, label, meta=None):
     """A Concept/Type reference (classified_as item): id + type 'Type'."""
@@ -58,20 +65,23 @@ def _lang_en():
 
 def _name(content):
     return {
-        "type": "Name", "content": content,
+        "type": "Name",
+        "content": content,
         "language": [_lang_en()],
         "classified_as": [_aat("300404670", "Primary Name")],
     }
 
 
 def _identifier(content, aat_num, label):
-    return {"type": "Identifier", "content": content,
-            "classified_as": [_aat(aat_num, label)]}
+    return {"type": "Identifier", "content": content, "classified_as": [_aat(aat_num, label)]}
 
 
 def _description(text):
-    return {"type": "LinguisticObject", "content": text,
-            "classified_as": [_aat("300435416", "Description")]}
+    return {
+        "type": "LinguisticObject",
+        "content": text,
+        "classified_as": [_aat("300435416", "Description")],
+    }
 
 
 def _timespan(raw_iso, display):
@@ -80,10 +90,13 @@ def _timespan(raw_iso, display):
     ts = {"type": "TimeSpan", "begin_of_the_begin": raw_iso, "end_of_the_end": raw_iso}
     disp = _clean(display)
     if disp:
-        ts["identified_by"] = [{
-            "type": "Name", "content": disp,
-            "classified_as": [_aat("300404669", "Display Title")],
-        }]
+        ts["identified_by"] = [
+            {
+                "type": "Name",
+                "content": disp,
+                "classified_as": [_aat("300404669", "Display Title")],
+            }
+        ]
     return ts
 
 
@@ -135,19 +148,28 @@ def _material(medium_label, medium_qid):
     if hit:
         num, lbl = hit
         return {"id": _AAT + num, "type": "Material", "_label": lbl}
-    if medium_qid:                       # any medium with a QID still maps
+    if medium_qid:  # any medium with a QID still maps
         return {"id": _wd(medium_qid), "type": "Material", "_label": label or "material"}
     return None
 
 
 # --- entity references (all require an id per the schema) -------------------- #
 
+
 def _place_ref(base, qid, label):
-    return {"id": f"{base}/place/{qid}", "type": "Place", "_label": _clean(label) or qid} if qid else None
+    return (
+        {"id": f"{base}/place/{qid}", "type": "Place", "_label": _clean(label) or qid}
+        if qid
+        else None
+    )
 
 
 def _group_ref(base, qid, label):
-    return {"id": f"{base}/group/{qid}", "type": "Group", "_label": _clean(label) or qid} if qid else None
+    return (
+        {"id": f"{base}/group/{qid}", "type": "Group", "_label": _clean(label) or qid}
+        if qid
+        else None
+    )
 
 
 def _wd_equivalent(qid, type_):
@@ -157,15 +179,27 @@ def _wd_equivalent(qid, type_):
 # --------------------------------------------------------------------------- #
 # HumanMadeObject                                                              #
 # --------------------------------------------------------------------------- #
-def object_record(artwork, artist, *, base, object_uri, person_uri,
-                  artwork_qid, artist_qid, description="", entity_types=None):
+def object_record(
+    artwork,
+    artist,
+    *,
+    base,
+    object_uri,
+    person_uri,
+    artwork_qid,
+    artist_qid,
+    description="",
+    entity_types=None,
+):
     title = artwork.get("title") or "Untitled"
     classified = [
         _aat("300033618", "Painting", meta=_aat("300435443", "Type of Work")),
         _aat("300133025", "Artwork"),
     ]
     if artwork.get("genreQid"):
-        classified.append(_concept(_wd(artwork["genreQid"]), _clean(artwork.get("genre")) or "genre"))
+        classified.append(
+            _concept(_wd(artwork["genreQid"]), _clean(artwork.get("genre")) or "genre")
+        )
 
     rec = {
         "@context": CONTEXT,
@@ -216,22 +250,30 @@ def object_record(artwork, artist, *, base, object_uri, person_uri,
             rec["current_owner"] = [owner]
 
     if artwork.get("depicts"):
-        rec["shows"] = [{
-            "id": f"{base}/visual/{artwork_qid}",
-            "type": "VisualItem",
-            "_label": f"Visual content of {title}",
-        }]
+        rec["shows"] = [
+            {
+                "id": f"{base}/visual/{artwork_qid}",
+                "type": "VisualItem",
+                "_label": f"Visual content of {title}",
+            }
+        ]
 
     image = _clean(artwork.get("image"))
     if image:
-        rec["representation"] = [{
-            "type": "VisualItem",
-            "_label": f"Digital image of {title}",
-            "digitally_shown_by": [{
-                "type": "DigitalObject", "_label": "Image file", "format": "image/jpeg",
-                "access_point": [{"id": image, "type": "DigitalObject"}],
-            }],
-        }]
+        rec["representation"] = [
+            {
+                "type": "VisualItem",
+                "_label": f"Digital image of {title}",
+                "digitally_shown_by": [
+                    {
+                        "type": "DigitalObject",
+                        "_label": "Image file",
+                        "format": "image/jpeg",
+                        "access_point": [{"id": image, "type": "DigitalObject"}],
+                    }
+                ],
+            }
+        ]
 
     rec["equivalent"] = [{"id": _wd(artwork_qid), "type": "HumanMadeObject", "_label": title}]
     return rec
@@ -248,11 +290,13 @@ def visual_record(artwork, *, visual_uri, artwork_qid, entity_types=None):
         q = d.get("qid")
         if not q:
             continue
-        represents.append({
-            "id": _wd(q),
-            "type": entity_types.get(q, "Type"),
-            "_label": d.get("label") or q,
-        })
+        represents.append(
+            {
+                "id": _wd(q),
+                "type": entity_types.get(q, "Type"),
+                "_label": d.get("label") or q,
+            }
+        )
     rec = {
         "@context": CONTEXT,
         "id": visual_uri,

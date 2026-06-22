@@ -9,6 +9,7 @@ aggregation) stays on SPARQL, because this API can't do it.
 Used for the dated-facts layer: significant events with their span ("stolen in
 1911, recovered in 1913") and awards with the year received.
 """
+
 import os
 import re
 

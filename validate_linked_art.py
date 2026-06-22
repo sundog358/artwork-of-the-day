@@ -11,6 +11,7 @@ Dev tool only — needs `pip install jsonschema` (requirements-dev.txt); the app
 does not import it. Run:  python validate_linked_art.py
 Exits non-zero if any record fails, so it can gate a release.
 """
+
 import json
 import os
 import sys
@@ -19,9 +20,9 @@ from jsonschema import Draft7Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT7
 
-import sparql_library as sl
-import linked_art as la
 import article_writer
+import linked_art as la
+import sparql_library as sl
 
 SCHEMA_DIR = os.path.join(os.path.dirname(__file__), "linked_art_schema")
 BASE = "https://example.org"
@@ -66,22 +67,34 @@ def build_records():
     desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
 
     obj = la.object_record(
-        artwork, artist, base=BASE,
-        object_uri=f"{BASE}/object/{aw_qid}", person_uri=f"{BASE}/person/{artist_qid}",
-        artwork_qid=aw_qid, artist_qid=artist_qid, description=desc,
+        artwork,
+        artist,
+        base=BASE,
+        object_uri=f"{BASE}/object/{aw_qid}",
+        person_uri=f"{BASE}/person/{artist_qid}",
+        artwork_qid=aw_qid,
+        artist_qid=artist_qid,
+        description=desc,
     )
 
     depicts = sl.related([(aw_qid, "depicts", "P180")]).get("depicts", [])
     artwork["depicts"] = depicts
     et = sl.classify_entities([d["qid"] for d in depicts if d.get("qid")])
-    vis = la.visual_record(artwork, visual_uri=f"{BASE}/visual/{aw_qid}",
-                           artwork_qid=aw_qid, entity_types=et)
+    vis = la.visual_record(
+        artwork, visual_uri=f"{BASE}/visual/{aw_qid}", artwork_qid=aw_qid, entity_types=et
+    )
 
-    per = la.person_record(sl.artist_facts(artist_qid), base=BASE,
-                           person_uri=f"{BASE}/person/{artist_qid}", artist_qid=artist_qid)
+    per = la.person_record(
+        sl.artist_facts(artist_qid),
+        base=BASE,
+        person_uri=f"{BASE}/person/{artist_qid}",
+        artist_qid=artist_qid,
+    )
 
     plc = la.place_record(sl.place_facts("Q90"), place_uri=f"{BASE}/place/Q90", place_qid="Q90")
-    grp = la.group_record(sl.group_facts("Q19675"), group_uri=f"{BASE}/group/Q19675", group_qid="Q19675")
+    grp = la.group_record(
+        sl.group_facts("Q19675"), group_uri=f"{BASE}/group/Q19675", group_qid="Q19675"
+    )
 
     return [
         ("object.json", "HumanMadeObject (Mona Lisa)", obj),

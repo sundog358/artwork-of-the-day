@@ -207,14 +207,18 @@ def build(artwork, artist, generate=False):
 
     # --- Contemporaries ---------------------------------------------------- #
     contemporaries = artist.get("contemporaries") or []
-    peers = _gloss(contemporaries, 4) or ([_labels(contemporaries, 4)] if _labels(contemporaries, 4) else [])
+    peers = _gloss(contemporaries, 4) or (
+        [_labels(contemporaries, 4)] if _labels(contemporaries, 4) else []
+    )
     if peers and name:
-        sections.append({
-            "heading": "In context",
-            "paragraphs": [
-                f"{name} worked alongside contemporaries such as " + _and_list(peers) + "."
-            ],
-        })
+        sections.append(
+            {
+                "heading": "In context",
+                "paragraphs": [
+                    f"{name} worked alongside contemporaries such as " + _and_list(peers) + "."
+                ],
+            }
+        )
 
     return {
         "title": title,

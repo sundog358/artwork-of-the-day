@@ -17,6 +17,7 @@ so first paint stays fast. Four layers, all grounded:
      "sources": [{label, url}], "entities": [{label, qid}]}
 The frontend appends the sections (reusing the same renderer + entity linking).
 """
+
 import concurrent.futures as _cf
 import os
 import re
@@ -24,8 +25,8 @@ import re
 import requests
 
 import sparql_library as S
-import wikidata_facts as WF
 import wikibase_rest as WR
+import wikidata_facts as WF
 
 
 def _gather(tasks, workers=5):
@@ -43,6 +44,7 @@ def _gather(tasks, workers=5):
                 print(f"enrichment[{key}] failed: {e}")
                 results[key] = None
     return results
+
 
 _CONTACT = os.environ.get("AOTD_CONTACT", "https://metahistorybook.com")
 _UA = {"User-Agent": f"ArtworkOfTheDay/1.0 ({_CONTACT})"}
@@ -130,8 +132,9 @@ def wikipedia_summary(title):
     extract = (d.get("extract") or "").strip()
     if not extract:
         return None
-    url = ((d.get("content_urls") or {}).get("desktop") or {}).get("page") \
-        or f"https://en.wikipedia.org/wiki/{title}"
+    url = ((d.get("content_urls") or {}).get("desktop") or {}).get(
+        "page"
+    ) or f"https://en.wikipedia.org/wiki/{title}"
     return {"title": d.get("title") or title.replace("_", " "), "extract": extract, "url": url}
 
 
@@ -174,7 +177,9 @@ def build(artwork_id, artist_id, artwork, artist):
             sources.append({"label": label, "url": url})
 
     # ---- Seeds / ids computed up front ---------------------------------- #
-    museum_qid = artwork.get("locationQid") or ((artwork.get("collection") or [{}])[0] or {}).get("qid")
+    museum_qid = artwork.get("locationQid") or ((artwork.get("collection") or [{}])[0] or {}).get(
+        "qid"
+    )
     if museum_qid and not S.QID_RE.match(museum_qid):
         museum_qid = ""
     _title = (artwork.get("title") or "").lower()
@@ -190,8 +195,11 @@ def build(artwork_id, artist_id, artwork, artist):
 
     depict_ids = [d["qid"] for d in (artwork.get("depicts") or []) if _real_subject(d)][:8]
     fact_ids = [q for q in (artwork_id, artist_id, museum_qid) if q and S.QID_RE.match(q)]
-    gloss_ids = [q for q in (artwork.get("genreQid"), artist.get("birthPlaceQid"),
-                             artist.get("deathPlaceQid")) if q]
+    gloss_ids = [
+        q
+        for q in (artwork.get("genreQid"), artist.get("birthPlaceQid"), artist.get("deathPlaceQid"))
+        if q
+    ]
 
     # ---- Step A: traditions first — it seeds the hop-2 lineage/peers ----- #
     trad = S.artist_traditions(artist_id)
@@ -203,14 +211,18 @@ def build(artwork_id, artist_id, artwork, artist):
 
     # Context entities to fetch Wikipedia summaries for (prioritised, capped to
     # avoid a wall of paragraphs): movement, museum, teacher, sitter, genre, city.
-    context_qids = [q for q in (
-        (mv_qids[0] if mv_qids else None),
-        museum_qid or None,
-        (teacher_qids[0] if teacher_qids else None),
-        (depict_ids[0] if depict_ids else None),
-        (genre_qids[0] if genre_qids else None),
-        artist.get("birthPlaceQid"),
-    ) if q][:3]
+    context_qids = [
+        q
+        for q in (
+            (mv_qids[0] if mv_qids else None),
+            museum_qid or None,
+            (teacher_qids[0] if teacher_qids else None),
+            (depict_ids[0] if depict_ids else None),
+            (genre_qids[0] if genre_qids else None),
+            artist.get("birthPlaceQid"),
+        )
+        if q
+    ][:3]
 
     # ---- Step B: every remaining fetch runs concurrently ----------------- #
     tasks = {
@@ -222,8 +234,16 @@ def build(artwork_id, artist_id, artwork, artist):
         "events_dated": lambda: WR.dated_facts(artwork_id, "P793"),
         "awards_dated": lambda: WR.dated_facts(artist_id, "P166"),
         "provenance": lambda: WR.reference_sources(artwork_id, limit=5),
-        "same_collection": (lambda: S.notable_artworks_by([museum_qid], "P195", exclude=artwork_id, limit=5)) if museum_qid else (lambda: []),
-        "same_movement": (lambda: S.notable_artworks_by(mv_qids, "P135", exclude=artwork_id, limit=5)) if mv_qids else (lambda: []),
+        "same_collection": (
+            lambda: S.notable_artworks_by([museum_qid], "P195", exclude=artwork_id, limit=5)
+        )
+        if museum_qid
+        else (lambda: []),
+        "same_movement": (
+            lambda: S.notable_artworks_by(mv_qids, "P135", exclude=artwork_id, limit=5)
+        )
+        if mv_qids
+        else (lambda: []),
         "depict_cards": (lambda: S.expand_entities(depict_ids)) if depict_ids else (lambda: {}),
         "stmts": lambda: WF.statements_for(fact_ids),
         "works": lambda: S.artist_works(artist_id, exclude_qid=artwork_id, limit=8),
@@ -233,11 +253,25 @@ def build(artwork_id, artist_id, artwork, artist):
         "ids": lambda: S.artist_identifiers(artist_id),
         "ctx": lambda: S.artwork_context(artwork_id),
         "place_gloss": (lambda: S.enrich_entities(gloss_ids)) if gloss_ids else (lambda: {}),
-        "museum_card": (lambda: S.expand_entities([museum_qid]).get(museum_qid)) if museum_qid else (lambda: None),
-        "cohort": (lambda: S.notable_by_property(teacher_qids, "P1066", exclude=artist_id, limit=6)) if teacher_qids else (lambda: []),
-        "alumni": (lambda: S.notable_by_property(school_qids, "P69", exclude=artist_id, limit=6, painter_only=True)) if school_qids else (lambda: []),
-        "peers": (lambda: S.genre_peers(genre_qids, nat, exclude=artist_id, limit=6)) if (genre_qids and nat) else (lambda: []),
-        "members": (lambda: S.notable_by_property(mv_qids, "P135", exclude=artist_id, limit=6)) if mv_qids else (lambda: []),
+        "museum_card": (lambda: S.expand_entities([museum_qid]).get(museum_qid))
+        if museum_qid
+        else (lambda: None),
+        "cohort": (lambda: S.notable_by_property(teacher_qids, "P1066", exclude=artist_id, limit=6))
+        if teacher_qids
+        else (lambda: []),
+        "alumni": (
+            lambda: S.notable_by_property(
+                school_qids, "P69", exclude=artist_id, limit=6, painter_only=True
+            )
+        )
+        if school_qids
+        else (lambda: []),
+        "peers": (lambda: S.genre_peers(genre_qids, nat, exclude=artist_id, limit=6))
+        if (genre_qids and nat)
+        else (lambda: []),
+        "members": (lambda: S.notable_by_property(mv_qids, "P135", exclude=artist_id, limit=6))
+        if mv_qids
+        else (lambda: []),
     }
     R = _gather(tasks, workers=5)
 
@@ -271,8 +305,12 @@ def build(artwork_id, artist_id, artwork, artist):
     if depict_ids and cards:
         phrases = [p for p in (_phrase_card(cards[q]) for q in depict_ids if q in cards) if p]
         if phrases:
-            sections.append({"heading": "A closer look at the subjects",
-                             "paragraphs": ["The painting brings together " + _and_list(phrases) + "."]})
+            sections.append(
+                {
+                    "heading": "A closer look at the subjects",
+                    "paragraphs": ["The painting brings together " + _and_list(phrases) + "."],
+                }
+            )
 
     # 1c. The work in detail (generic narration + dated significant events).
     work_facts = WF.narrate(all_stmts.get(artwork_id, []), skip={"P793"}, limit=8)
@@ -295,8 +333,10 @@ def build(artwork_id, artist_id, artwork, artist):
             cnt = 0
         first, last = stats.get("first", ""), stats.get("last", "")
         if cnt >= 3 and first and last and first != last:
-            paras.append(f"In all, {name} has {cnt} documented paintings on Wikidata, "
-                         f"spanning {first}–{last}.")
+            paras.append(
+                f"In all, {name} has {cnt} documented paintings on Wikidata, "
+                f"spanning {first}–{last}."
+            )
         sections.append({"heading": "Other works by the artist", "paragraphs": paras})
         for w in works[:6]:
             entities.append({"label": w["label"], "qid": w["qid"], "open": "artwork"})
@@ -305,12 +345,17 @@ def build(artwork_id, artist_id, artwork, artist):
     collections = g("collections", [])
     if collections:
         labels = [c["label"] for c in collections]
-        held = [f"Beyond this piece, {name}'s paintings are held in collections including "
-                + _and_list(labels) + "."]
+        held = [
+            f"Beyond this piece, {name}'s paintings are held in collections including "
+            + _and_list(labels)
+            + "."
+        ]
         top = collections[0]
         if top["n"] >= 2:
-            held.append(f"Their work is most concentrated at {top['label']}, "
-                        f"which holds {top['n']} of their paintings.")
+            held.append(
+                f"Their work is most concentrated at {top['label']}, "
+                f"which holds {top['n']} of their paintings."
+            )
         sections.append({"heading": "Where the artist's work is held", "paragraphs": held})
 
     # 2c. Genre, movement & training tradition (what it is).
@@ -322,8 +367,9 @@ def build(artwork_id, artist_id, artwork, artist):
         d = f" — {m['description']}" if m.get("description") else ""
         tradition.append(f"The work belongs to the {m['label']} movement{d}.")
     for ed in trad["education"][:2]:
-        if ed.get("description"):
-            tradition.append(f"{name} trained at {ed['label']}, {_a_or_an(ed['description'])} {ed['description']}.")
+        desc = ed.get("description")
+        if desc:
+            tradition.append(f"{name} trained at {ed['label']}, {_a_or_an(desc)} {desc}.")
     if tradition:
         sections.append({"heading": "Genre and tradition", "paragraphs": tradition[:4]})
 
@@ -337,11 +383,16 @@ def build(artwork_id, artist_id, artwork, artist):
 
     lineage = []
     if teacher_qids:
-        s = _people(f"In {trad['teachers'][0]['label']}'s circle of pupils, {name} trained alongside ", g("cohort", []))
+        s = _people(
+            f"In {trad['teachers'][0]['label']}'s circle of pupils, {name} trained alongside ",
+            g("cohort", []),
+        )
         if s:
             lineage.append(s)
     if school_qids:
-        s = _people(f"Fellow students at the {trad['education'][0]['label']} included ", g("alumni", []))
+        s = _people(
+            f"Fellow students at the {trad['education'][0]['label']} included ", g("alumni", [])
+        )
         if s:
             lineage.append(s)
     if genre_qids and nat:
@@ -368,12 +419,16 @@ def build(artwork_id, artist_id, artwork, artist):
     sc = g("same_collection", [])
     if sc:
         loc = artwork.get("location")
-        where = (R.get("museum_card") or {}).get("label") or (loc if loc and loc != "Unknown" else "the same collection")
+        where = (R.get("museum_card") or {}).get("label") or (
+            loc if loc and loc != "Unknown" else "the same collection"
+        )
         s = _works(f"Also held at {where}: ", sc)
         if s:
             related.append(s)
     if mv_qids:
-        s = _works(f"Other {trad['movements'][0]['label']} paintings include ", g("same_movement", []))
+        s = _works(
+            f"Other {trad['movements'][0]['label']} paintings include ", g("same_movement", [])
+        )
         if s:
             related.append(s)
     if related:
@@ -395,8 +450,24 @@ def build(artwork_id, artist_id, artwork, artist):
             sections.append({"heading": "The museum", "paragraphs": museum_paras})
 
     # 2f. More about the artist (generic facts beyond the basics).
-    artist_skip = {"P166", "P463", "P69", "P1066", "P802", "P737", "P106", "P27",
-                   "P135", "P136", "P800", "P569", "P570", "P19", "P20", "P26"}
+    artist_skip = {
+        "P166",
+        "P463",
+        "P69",
+        "P1066",
+        "P802",
+        "P737",
+        "P106",
+        "P27",
+        "P135",
+        "P136",
+        "P800",
+        "P569",
+        "P570",
+        "P19",
+        "P20",
+        "P26",
+    }
     more_artist = WF.narrate(all_stmts.get(artist_id, []), skip=artist_skip, limit=6)
     aw_dated = g("awards_dated", [])
     if aw_dated:
@@ -413,7 +484,9 @@ def build(artwork_id, artist_id, artwork, artist):
     if ctx["events"]:
         facts.append(f"It relates to {_and_list(ctx['events'][:3])}.")
     if ctx["exhibitions"]:
-        facts.append(f"It has featured in exhibitions including {_and_list(ctx['exhibitions'][:4])}.")
+        facts.append(
+            f"It has featured in exhibitions including {_and_list(ctx['exhibitions'][:4])}."
+        )
     if facts:
         sections.append({"heading": "Exhibitions and context", "paragraphs": facts})
 
@@ -437,7 +510,13 @@ def build(artwork_id, artist_id, artwork, artist):
             fi, la = int(stats.get("first")), int(stats.get("last"))
             if la > fi:
                 pos = (made_y - fi) / (la - fi)
-                stage = "an early-career work" if pos < 0.34 else "a late-career work" if pos > 0.66 else "a mid-career work"
+                stage = (
+                    "an early-career work"
+                    if pos < 0.34
+                    else "a late-career work"
+                    if pos > 0.66
+                    else "a mid-career work"
+                )
                 sentence += f" — {stage} in an output spanning {fi}–{la}"
         except (TypeError, ValueError):
             pass
@@ -463,7 +542,9 @@ def build(artwork_id, artist_id, artwork, artist):
     if rel["students"]:
         circle.append(f"Among {name}'s students were {_and_list(rel['students'][:6])}.")
     if rel["influenced"]:
-        circle.append(f"Artists who cite {name} as an influence include {_and_list(rel['influenced'][:6])}.")
+        circle.append(
+            f"Artists who cite {name} as an influence include {_and_list(rel['influenced'][:6])}."
+        )
     if circle:
         sections.append({"heading": "Circle and legacy", "paragraphs": circle})
 
@@ -473,14 +554,32 @@ def build(artwork_id, artist_id, artwork, artist):
     if ids.get("viaf"):
         links.append({"label": "VIAF", "url": f"https://viaf.org/viaf/{ids['viaf']}"})
     if ids.get("ulan"):
-        links.append({"label": "Getty ULAN", "url": f"https://vocab.getty.edu/page/ulan/{ids['ulan']}"})
+        links.append(
+            {"label": "Getty ULAN", "url": f"https://vocab.getty.edu/page/ulan/{ids['ulan']}"}
+        )
     if ids.get("rkd"):
         links.append({"label": "RKD", "url": f"https://rkd.nl/en/explore/artists/{ids['rkd']}"})
     if ids.get("loc"):
-        links.append({"label": "Library of Congress", "url": f"https://id.loc.gov/authorities/names/{ids['loc']}"})
+        links.append(
+            {
+                "label": "Library of Congress",
+                "url": f"https://id.loc.gov/authorities/names/{ids['loc']}",
+            }
+        )
     if ids.get("commons"):
-        links.append({"label": "Wikimedia Commons",
-                      "url": "https://commons.wikimedia.org/wiki/Category:" + ids["commons"].replace(" ", "_")})
+        links.append(
+            {
+                "label": "Wikimedia Commons",
+                "url": "https://commons.wikimedia.org/wiki/Category:"
+                + ids["commons"].replace(" ", "_"),
+            }
+        )
 
-    return {"sections": sections, "otherWorks": works, "sources": sources,
-            "entities": entities, "links": links, "provenance": g("provenance", [])}
+    return {
+        "sections": sections,
+        "otherWorks": works,
+        "sources": sources,
+        "entities": entities,
+        "links": links,
+        "provenance": g("provenance", []),
+    }

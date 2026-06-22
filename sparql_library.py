@@ -18,12 +18,13 @@ a superset of what the panel already expects, plus the richer fields. Lessons
 baked in: query labels via the label SERVICE in the SELECT (never build qid|label
 pairs in a post-SERVICE BIND), and skip entities whose label is just their QID.
 """
+
+import os
 import re
 
 import requests
 
 WDQS_ENDPOINT = "https://query.wikidata.org/sparql"
-import os
 
 _CONTACT = os.environ.get("AOTD_CONTACT", "https://github.com/jchirum/artwork-of-the-day")
 HEADERS = {"User-Agent": f"ArtworkOfTheDay/1.0 ({_CONTACT})"}
@@ -67,6 +68,7 @@ def format_date(date_str):
         return "Unknown"
     try:
         from datetime import datetime
+
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         if dt.month == 1 and dt.day == 1:
             return str(dt.year)
@@ -96,7 +98,8 @@ def _labels_from(items, limit):
 # Artwork facts (single scoped query)                                         #
 # --------------------------------------------------------------------------- #
 def artwork_facts(artwork_id):
-    query = """
+    query = (
+        """
     SELECT ?artworkLabel ?date ?genre ?genreLabel ?medium ?mediumLabel ?height ?width
            ?location ?locationLabel ?inventory ?commissionedByLabel ?seriesLabel
            ?creationPlace ?creationPlaceLabel ?country ?countryLabel
@@ -118,7 +121,9 @@ def artwork_facts(artwork_id):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
-    """ % artwork_id
+    """
+        % artwork_id
+    )
 
     results = run_sparql(query, timeout=30)
     if not results:
@@ -137,13 +142,13 @@ def artwork_facts(artwork_id):
     return {
         "title": title,
         "creationDate": format_date(_v(r, "date")),
-        "creationDateRaw": _v(r, "date"),   # ISO, for Linked Art timespans
+        "creationDateRaw": _v(r, "date"),  # ISO, for Linked Art timespans
         "genre": _v(r, "genreLabel") or "Unknown",
         "genreQid": _qid_of(r, "genre"),
         "medium": _v(r, "mediumLabel") or "Unknown",
         "mediumQid": _qid_of(r, "medium"),
         "dimensions": dimensions or "Unknown",
-        "heightCm": _v(r, "height"),        # raw numeric strings, for Linked Art dimensions
+        "heightCm": _v(r, "height"),  # raw numeric strings, for Linked Art dimensions
         "widthCm": _v(r, "width"),
         "location": _v(r, "locationLabel") or "Unknown",
         "locationQid": _qid_of(r, "location"),
@@ -166,7 +171,8 @@ def artist_facts(artist_id):
     """Scalar (single-valued) artist fields only — fast. Multi-valued bio fields
     are fetched as additive rows in build_dossier() to avoid GROUP_CONCAT
     cartesian blow-up on prolific artists."""
-    query = """
+    query = (
+        """
     SELECT ?artistLabel ?artistDescription ?birth ?death ?birthPlace ?birthPlaceLabel
            ?deathPlace ?deathPlaceLabel ?image ?article WHERE {
       BIND(wd:%s AS ?artist)
@@ -179,7 +185,9 @@ def artist_facts(artist_id):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
-    """ % artist_id
+    """
+        % artist_id
+    )
 
     results = run_sparql(query, timeout=30)
     if not results:
@@ -197,7 +205,7 @@ def artist_facts(artist_id):
         "name": name,
         "description": _v(r, "artistDescription"),
         "birthdate": format_date(birth_raw),
-        "birthDateRaw": birth_raw,          # ISO, for Linked Art Birth timespan
+        "birthDateRaw": birth_raw,  # ISO, for Linked Art Birth timespan
         "birthplace": _v(r, "birthPlaceLabel"),
         "birthPlaceQid": _qid_of(r, "birthPlace"),
         "deathdate": format_date(death) if death else "",
@@ -230,7 +238,8 @@ def place_facts(place_qid):
     """Scalar facts for a place: label, description, WKT point, Getty TGN id."""
     if not QID_RE.match(place_qid):
         return {}
-    query = """
+    query = (
+        """
     SELECT ?placeLabel ?placeDescription ?coord ?tgn ?typeLabel WHERE {
       BIND(wd:%s AS ?place)
       OPTIONAL { ?place wdt:P625 ?coord. }     # coordinate location
@@ -239,7 +248,9 @@ def place_facts(place_qid):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
-    """ % place_qid
+    """
+        % place_qid
+    )
     try:
         rows = run_sparql(query, timeout=20)
     except Exception as e:
@@ -267,7 +278,8 @@ def group_facts(group_qid):
     """Scalar facts for a group/institution: label, description, inception, TGN/ULAN."""
     if not QID_RE.match(group_qid):
         return {}
-    query = """
+    query = (
+        """
     SELECT ?groupLabel ?groupDescription ?inception ?ulan WHERE {
       BIND(wd:%s AS ?group)
       OPTIONAL { ?group wdt:P571 ?inception. }   # inception (date formed)
@@ -275,7 +287,9 @@ def group_facts(group_qid):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
-    """ % group_qid
+    """
+        % group_qid
+    )
     try:
         rows = run_sparql(query, timeout=20)
     except Exception as e:
@@ -312,7 +326,8 @@ def enrich_entities(qids):
     if not valid:
         return out
     values = " ".join(f"wd:{q}" for q in valid)
-    query = """
+    query = (
+        """
     SELECT ?e ?eLabel ?eDescription (SAMPLE(?birth) AS ?b) (SAMPLE(?death) AS ?d) WHERE {
       VALUES ?e { %s }
       OPTIONAL { ?e wdt:P569 ?birth. }
@@ -320,7 +335,9 @@ def enrich_entities(qids):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     GROUP BY ?e ?eLabel ?eDescription
-    """ % values
+    """
+        % values
+    )
     try:
         rows = run_sparql(query, timeout=30)
     except Exception as e:
@@ -349,18 +366,21 @@ def classify_entities(qids):
     generic `Type` for concepts/things. One batched query, no per-entity calls.
     """
     valid = [q for q in dict.fromkeys(qids) if QID_RE.match(q)]
-    out = {q: "Type" for q in valid}
+    out = dict.fromkeys(valid, "Type")
     if not valid:
         return out
     values = " ".join(f"wd:{q}" for q in valid)
-    query = """
+    query = (
+        """
     SELECT ?e (SAMPLE(?human) AS ?isHuman) (SAMPLE(?coord) AS ?hasCoord) WHERE {
       VALUES ?e { %s }
       OPTIONAL { ?e wdt:P31 ?cls. BIND(IF(?cls = wd:Q5, 1, 0) AS ?human) }
       OPTIONAL { ?e wdt:P625 ?coord. }
     }
     GROUP BY ?e
-    """ % values
+    """
+        % values
+    )
     try:
         rows = run_sparql(query, timeout=25)
     except Exception as e:
@@ -385,7 +405,8 @@ def related(specs):
     if not valid:
         return out
     values = " ".join(f'(wd:{s} "{k}" wdt:{p})' for s, k, p in valid)
-    query = """
+    query = (
+        """
     SELECT ?rel ?entity ?entityLabel ?entityDescription WHERE {
       VALUES (?subj ?rel ?p) { %s }
       ?subj ?p ?entity.
@@ -395,7 +416,9 @@ def related(specs):
       }
     }
     LIMIT 500
-    """ % values
+    """
+        % values
+    )
     try:
         results = run_sparql(query, timeout=30)
     except Exception as e:
@@ -478,7 +501,8 @@ def artist_works(artist_id, exclude_qid="", limit=8):
     if not QID_RE.match(artist_id):
         return []
     # Require an image (P18) so every listed work is openable in the explore view.
-    query = """
+    query = (
+        """
     SELECT ?w ?wLabel (SAMPLE(?d) AS ?date) WHERE {
       ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P18 ?img.
       OPTIONAL { ?w wdt:P571 ?d. }
@@ -486,7 +510,9 @@ def artist_works(artist_id, exclude_qid="", limit=8):
     }
     GROUP BY ?w ?wLabel
     LIMIT 40
-    """ % artist_id
+    """
+        % artist_id
+    )
     try:
         rows = run_sparql(query, timeout=30)
     except Exception as e:
@@ -513,14 +539,17 @@ def artwork_context(artwork_id):
     out = {"exhibitions": [], "events": [], "movements": []}
     if not QID_RE.match(artwork_id):
         return out
-    query = """
+    query = (
+        """
     SELECT ?rel ?vLabel WHERE {
       VALUES (?rel ?p) { ("exhibitions" wdt:P608) ("events" wdt:P793) ("movements" wdt:P135) }
       wd:%s ?p ?v.
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 100
-    """ % artwork_id
+    """
+        % artwork_id
+    )
     try:
         rows = run_sparql(query, timeout=25)
     except Exception as e:
@@ -539,7 +568,8 @@ def artist_collections(artist_id, limit=10):
     context ('held at the Met, the MFA…') and the comparative 'most-collected at X'."""
     if not QID_RE.match(artist_id):
         return []
-    query = """
+    query = (
+        """
     SELECT ?cLabel (COUNT(DISTINCT ?w) AS ?n) WHERE {
       ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P195 ?c.
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
@@ -547,7 +577,9 @@ def artist_collections(artist_id, limit=10):
     GROUP BY ?cLabel
     ORDER BY DESC(?n)
     LIMIT 25
-    """ % artist_id
+    """
+        % artist_id
+    )
     try:
         rows = run_sparql(query, timeout=30)
     except Exception as e:
@@ -606,7 +638,8 @@ def artist_traditions(artist_id):
     out = {"genres": [], "movements": [], "education": [], "teachers": [], "nationality": []}
     if not QID_RE.match(artist_id):
         return out
-    query = """
+    query = (
+        """
     SELECT ?rel ?v ?vLabel ?vDescription WHERE {
       VALUES (?rel ?p) { ("genres" wdt:P136) ("movements" wdt:P135)
                          ("education" wdt:P69) ("teachers" wdt:P1066)
@@ -615,7 +648,9 @@ def artist_traditions(artist_id):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 60
-    """ % artist_id
+    """
+        % artist_id
+    )
     try:
         rows = run_sparql(query, timeout=25)
     except Exception as e:
@@ -675,7 +710,8 @@ def expand_entities(qids):
     if not valid:
         return out
     values = " ".join(f"wd:{q}" for q in valid)
-    query = """
+    query = (
+        """
     SELECT ?e ?eLabel ?eDescription (SAMPLE(?type) AS ?t) (SAMPLE(?b) AS ?birth)
            (SAMPLE(?d) AS ?death) (SAMPLE(?inc) AS ?inception)
            (SAMPLE(?ctry) AS ?country) (SAMPLE(?adm) AS ?admin) WHERE {
@@ -689,7 +725,9 @@ def expand_entities(qids):
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     GROUP BY ?e ?eLabel ?eDescription
-    """ % values
+    """
+        % values
+    )
     try:
         rows = run_sparql(query, timeout=35)
     except Exception as e:
@@ -801,12 +839,15 @@ def artist_work_stats(artist_id):
     out = {"count": 0, "first": "", "last": ""}
     if not QID_RE.match(artist_id):
         return out
-    query = """
+    query = (
+        """
     SELECT (COUNT(DISTINCT ?w) AS ?n) (MIN(?y) AS ?first) (MAX(?y) AS ?last) WHERE {
       ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213.
       OPTIONAL { ?w wdt:P571 ?date. BIND(YEAR(?date) AS ?y) }
     }
-    """ % artist_id
+    """
+        % artist_id
+    )
     try:
         rows = run_sparql(query, timeout=30)
     except Exception as e:
@@ -909,22 +950,24 @@ def build_dossier(artwork_id, artist_id):
         artist = {}
 
     # One additive VALUES query for ALL multi-valued fields (artwork + artist).
-    nb = related([
-        (artwork_id, "depicts", "P180"),
-        (artwork_id, "collection", "P195"),
-        (artwork_id, "movementLinks", "P135"),
-        (artist_id, "influencedBy", "P737"),
-        (artist_id, "artistMovement", "P135"),
-        (artist_id, "nationality", "P27"),
-        (artist_id, "occupation", "P106"),
-        (artist_id, "notableWork", "P800"),
-        (artist_id, "education", "P69"),
-        (artist_id, "teacher", "P1066"),
-        (artist_id, "student", "P802"),
-        (artist_id, "genre", "P136"),
-        (artist_id, "award", "P166"),
-        (artist_id, "memberOf", "P463"),
-    ])
+    nb = related(
+        [
+            (artwork_id, "depicts", "P180"),
+            (artwork_id, "collection", "P195"),
+            (artwork_id, "movementLinks", "P135"),
+            (artist_id, "influencedBy", "P737"),
+            (artist_id, "artistMovement", "P135"),
+            (artist_id, "nationality", "P27"),
+            (artist_id, "occupation", "P106"),
+            (artist_id, "notableWork", "P800"),
+            (artist_id, "education", "P69"),
+            (artist_id, "teacher", "P1066"),
+            (artist_id, "student", "P802"),
+            (artist_id, "genre", "P136"),
+            (artist_id, "award", "P166"),
+            (artist_id, "memberOf", "P463"),
+        ]
+    )
     if artwork:
         artwork["depicts"] = nb["depicts"][:10]
         artwork["collection"] = nb["collection"][:4]
@@ -970,9 +1013,22 @@ def build_dossier(artwork_id, artist_id):
         _add_entity(artist["name"], artist_id)
     # Cap per source — only entities that can plausibly appear in the prose (the
     # article is built from a similarly capped fact packet); keeps the map lean.
-    for key in ("depicts", "collection", "movementLinks", "influencedBy",
-                "artistMovement", "nationality", "occupation", "notableWork",
-                "education", "teacher", "student", "genre", "award", "memberOf"):
+    for key in (
+        "depicts",
+        "collection",
+        "movementLinks",
+        "influencedBy",
+        "artistMovement",
+        "nationality",
+        "occupation",
+        "notableWork",
+        "education",
+        "teacher",
+        "student",
+        "genre",
+        "award",
+        "memberOf",
+    ):
         # Influences and teachers/students are artists → openable in the explore view.
         open_as = "artist" if key in ("influencedBy", "teacher", "student") else None
         for e in nb.get(key, [])[:10]:

@@ -1,12 +1,13 @@
-from flask import Flask, jsonify, request, make_response
-import requests
-from datetime import datetime
 import json
+import os
 import random
 import re
-import os
 import threading
 from collections import OrderedDict
+from datetime import datetime
+
+import requests
+from flask import Flask, jsonify, make_response, request
 
 
 def _load_dotenv(path=".env"):
@@ -16,13 +17,13 @@ def _load_dotenv(path=".env"):
     surrounding quotes. Existing environment variables are not overwritten.
     """
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for raw in f:
                 line = raw.strip()
                 if not line or line.startswith("#"):
                     continue
                 if line.startswith("export "):
-                    line = line[len("export "):]
+                    line = line[len("export ") :]
                 key, sep, value = line.partition("=")
                 if not sep:
                     continue
@@ -37,18 +38,19 @@ def _load_dotenv(path=".env"):
 _load_dotenv()
 
 import article_writer  # noqa: E402  (imported after .env is loaded)
-import sparql_library  # noqa: E402
-import linked_art  # noqa: E402
 import enrichment  # noqa: E402
+import linked_art  # noqa: E402
+import sparql_library  # noqa: E402
 
-QID_RE = re.compile(r'^Q\d+$')
+QID_RE = re.compile(r"^Q\d+$")
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder="static")
 
 # Trust the reverse proxy a managed host (Render/Cloud Run/Railway/nginx) puts in
 # front of us, so request.remote_addr is the real client IP (correct rate-limit
 # buckets) and request.host_url/scheme reflect the public https origin.
 from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # --- Rate limiting --------------------------------------------------------- #
@@ -77,10 +79,12 @@ limiter = Limiter(
 
 @app.errorhandler(429)
 def _ratelimited(e):
-    return jsonify({
-        "status": "error",
-        "message": "Too many requests — please slow down and try again shortly.",
-    }), 429
+    return jsonify(
+        {
+            "status": "error",
+            "message": "Too many requests — please slow down and try again shortly.",
+        }
+    ), 429
 
 
 # --- Bounded in-process caches --------------------------------------------- #
@@ -99,11 +103,11 @@ def _cache_set(cache, key, value):
     cache[key] = value
 
 
-WDQS_ENDPOINT = 'https://query.wikidata.org/sparql'
+WDQS_ENDPOINT = "https://query.wikidata.org/sparql"
 # Wikimedia asks for a descriptive User-Agent with a real contact. Override the
 # contact via the AOTD_CONTACT env var when deploying.
-_CONTACT = os.environ.get('AOTD_CONTACT', 'https://github.com/jchirum/artwork-of-the-day')
-HEADERS = {'User-Agent': f'ArtworkOfTheDay/1.0 ({_CONTACT})'}
+_CONTACT = os.environ.get("AOTD_CONTACT", "https://github.com/jchirum/artwork-of-the-day")
+HEADERS = {"User-Agent": f"ArtworkOfTheDay/1.0 ({_CONTACT})"}
 
 # Total paintings (Q3305213) on Wikidata that have both an image and a creator
 # is ~390k. We pick a random offset below this to get variety while keeping the
@@ -129,17 +133,17 @@ def run_sparql(query, timeout=45):
     """Execute a SPARQL query against Wikidata and return the result bindings."""
     response = requests.get(
         WDQS_ENDPOINT,
-        params={'format': 'json', 'query': query},
+        params={"format": "json", "query": query},
         headers=HEADERS,
         timeout=timeout,
     )
     response.raise_for_status()
-    return response.json().get('results', {}).get('bindings', [])
+    return response.json().get("results", {}).get("bindings", [])
 
 
 def qid(uri):
     """Extract the bare Q-id from a Wikidata entity URI."""
-    return uri.rsplit('/', 1)[-1] if uri else ''
+    return uri.rsplit("/", 1)[-1] if uri else ""
 
 
 def dedupe_by_artwork(paintings):
@@ -147,8 +151,8 @@ def dedupe_by_artwork(paintings):
     seen = set()
     unique = []
     for p in paintings:
-        if p['artwork_id'] and p['artwork_id'] not in seen:
-            seen.add(p['artwork_id'])
+        if p["artwork_id"] and p["artwork_id"] not in seen:
+            seen.add(p["artwork_id"])
             unique.append(p)
     return unique
 
@@ -157,8 +161,8 @@ def commons_thumb(image_url, width=800):
     """Turn a Wikidata P18 (commons FilePath) URL into an https thumbnail URL."""
     if not image_url:
         return ""
-    image_url = image_url.replace('http://', 'https://')
-    sep = '&' if '?' in image_url else '?'
+    image_url = image_url.replace("http://", "https://")
+    sep = "&" if "?" in image_url else "?"
     return f"{image_url}{sep}width={width}"
 
 
@@ -185,12 +189,14 @@ def birthday_paintings(month, day):
     results = run_sparql(query, timeout=45)
     paintings = []
     for r in results:
-        paintings.append({
-            'artwork_id': qid(r.get('artwork', {}).get('value', '')),
-            'creator_id': qid(r.get('creator', {}).get('value', '')),
-            'image': r.get('image', {}).get('value', ''),
-            'birth': r.get('birth', {}).get('value', ''),
-        })
+        paintings.append(
+            {
+                "artwork_id": qid(r.get("artwork", {}).get("value", "")),
+                "creator_id": qid(r.get("creator", {}).get("value", "")),
+                "image": r.get("image", {}).get("value", ""),
+                "birth": r.get("birth", {}).get("value", ""),
+            }
+        )
     print(f"Found {len(paintings)} paintings for birthday {month:02d}-{day:02d}")
     return paintings
 
@@ -202,24 +208,29 @@ def get_random_paintings(rng):
     is never empty. The label SERVICE is omitted for speed.
     """
     offset = rng.randint(0, MAX_OFFSET)
-    query = """
+    query = (
+        """
     SELECT ?artwork ?image ?creator WHERE {
       ?artwork wdt:P31 wd:Q3305213;   # instance of: painting
                wdt:P18 ?image;        # must have an image
                wdt:P170 ?creator.     # must have a creator
     }
     LIMIT 50 OFFSET %d
-    """ % offset
+    """
+        % offset
+    )
 
     results = run_sparql(query, timeout=45)
     paintings = []
     for r in results:
-        paintings.append({
-            'artwork_id': qid(r.get('artwork', {}).get('value', '')),
-            'creator_id': qid(r.get('creator', {}).get('value', '')),
-            'image': r.get('image', {}).get('value', ''),
-            'birth': '',
-        })
+        paintings.append(
+            {
+                "artwork_id": qid(r.get("artwork", {}).get("value", "")),
+                "creator_id": qid(r.get("creator", {}).get("value", "")),
+                "image": r.get("image", {}).get("value", ""),
+                "birth": "",
+            }
+        )
     print(f"Found {len(paintings)} fallback paintings at offset {offset}")
     return paintings
 
@@ -229,25 +240,25 @@ def gather_details(artwork_id, artist_id):
     return sparql_library.build_dossier(artwork_id, artist_id)
 
 
-@app.route('/')
-@limiter.exempt  # the home page is a health-check target + every visit's first hit; never throttle it
+@app.route("/")
+@limiter.exempt  # home page = health-check target + every visit's first hit; never throttle
 def index():
-    return app.send_static_file('index.html')
+    return app.send_static_file("index.html")
 
 
-@app.route('/healthz')
+@app.route("/healthz")
 @limiter.exempt  # platform health checks poll this frequently; must never be rate limited
 def healthz():
     """Lightweight liveness probe for Render/other hosts (no Wikidata, no model)."""
     return jsonify({"status": "ok"}), 200
 
 
-@app.route('/legal')
-@app.route('/license')
+@app.route("/legal")
+@app.route("/license")
 @limiter.exempt  # a static informational page; no need to rate limit
 def legal():
     """Licenses & attribution page (Wikidata CC0, Wikipedia CC BY-SA, Commons)."""
-    return app.send_static_file('legal.html')
+    return app.send_static_file("legal.html")
 
 
 # Most artworks to expose in the day's gallery.
@@ -267,12 +278,15 @@ def _build_gallery(month, day, date_label, seed):
     if not paintings:
         return None
     rng.shuffle(paintings)
-    items = [{
-        "artwork_id": p["artwork_id"],
-        "creator_id": p["creator_id"],
-        "image": commons_thumb(p["image"]),
-        "birthYear": p.get("birth", "")[:4],
-    } for p in paintings[:MAX_GALLERY]]
+    items = [
+        {
+            "artwork_id": p["artwork_id"],
+            "creator_id": p["creator_id"],
+            "image": commons_thumb(p["image"]),
+            "birthYear": p.get("birth", "")[:4],
+        }
+        for p in paintings[:MAX_GALLERY]
+    ]
     return {
         "status": "success",
         "occasion": occasion,
@@ -282,7 +296,7 @@ def _build_gallery(month, day, date_label, seed):
     }
 
 
-@app.route('/artwork-of-the-day', methods=['GET'])
+@app.route("/artwork-of-the-day", methods=["GET"])
 def artwork_of_the_day():
     """Return the list of artworks connected to a date.
 
@@ -291,12 +305,12 @@ def artwork_of_the_day():
     fetches each artwork's details on demand, so this endpoint stays fast.
     """
     try:
-        m, d = request.args.get('month'), request.args.get('day')
+        m, d = request.args.get("month"), request.args.get("day")
         if m and d:
             # Explicit date (explore): validate, then serve from the per-date cache.
             try:
                 month, day = int(m), int(d)
-                date_label = datetime(2000, month, day).strftime('%B %d')  # 2000 = leap year
+                date_label = datetime(2000, month, day).strftime("%B %d")  # 2000 = leap year
             except (ValueError, TypeError):
                 return jsonify({"status": "error", "message": "Invalid month/day"}), 400
             key = f"{month:02d}-{day:02d}"
@@ -305,45 +319,53 @@ def artwork_of_the_day():
                     return jsonify(_date_cache[key])
             payload = _build_gallery(month, day, date_label, f"date-{key}")
             if payload is None:
-                return jsonify({"status": "error", "message": "No paintings found for that date"}), 404
+                return jsonify(
+                    {"status": "error", "message": "No paintings found for that date"}
+                ), 404
             with _cache_lock:
                 _cache_set(_date_cache, key, payload)
             return jsonify(payload)
 
         today = datetime.now()
-        date_key = today.strftime('%Y-%m-%d')
+        date_key = today.strftime("%Y-%m-%d")
 
         # Serve the day's cached gallery if we already built it.
         with _cache_lock:
             if _day_cache["date"] == date_key:
                 return jsonify(_day_cache["payload"])
 
-        payload = _build_gallery(today.month, today.day, today.strftime('%B %d'), date_key)
+        payload = _build_gallery(today.month, today.day, today.strftime("%B %d"), date_key)
         if payload is None:
-            return jsonify({
-                "status": "error",
-                "error": "No paintings found",
-                "message": "Could not find any paintings in the database",
-            }), 404
+            return jsonify(
+                {
+                    "status": "error",
+                    "error": "No paintings found",
+                    "message": "Could not find any paintings in the database",
+                }
+            ), 404
         with _cache_lock:
             _day_cache["date"] = date_key
             _day_cache["payload"] = payload
-        print(f"Built and cached {payload['count']} items for {date_key} (occasion={payload['occasion']})")
+        print(f"Built {payload['count']} items for {date_key} (occasion={payload['occasion']})")
         return jsonify(payload)
 
     except requests.exceptions.Timeout:
-        return jsonify({
-            "status": "error",
-            "error": "Timeout",
-            "message": "Wikidata took too long to respond. Please try again.",
-        }), 504
+        return jsonify(
+            {
+                "status": "error",
+                "error": "Timeout",
+                "message": "Wikidata took too long to respond. Please try again.",
+            }
+        ), 504
     except Exception as e:
         print(f"Critical error in artwork_of_the_day: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e),
-            "message": "An unexpected error occurred while fetching artwork",
-        }), 500
+        return jsonify(
+            {
+                "status": "error",
+                "error": str(e),
+                "message": "An unexpected error occurred while fetching artwork",
+            }
+        ), 500
 
 
 def _resolve_artwork(artwork_qid):
@@ -367,12 +389,15 @@ def _resolve_artwork(artwork_qid):
 
 def _resolve_artist(artist_qid):
     """Pick a representative painting (with an image) by an artist QID."""
-    query = """
+    query = (
+        """
     SELECT ?w ?image WHERE {
       ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P18 ?image.
     }
     LIMIT 1
-    """ % artist_qid
+    """
+        % artist_qid
+    )
     rows = run_sparql(query, timeout=25)
     if not rows:
         return None
@@ -383,12 +408,12 @@ def _resolve_artist(artist_qid):
     return {"artwork_id": artwork, "creator_id": artist_qid, "image": commons_thumb(image)}
 
 
-@app.route('/resolve', methods=['GET'])
+@app.route("/resolve", methods=["GET"])
 def resolve():
     """Explore: turn an artwork OR artist QID into a displayable gallery item.
     `?artwork=Q…` opens that painting; `?artist=Q…` opens one of their works."""
-    aw = request.args.get('artwork', '')
-    ar = request.args.get('artist', '')
+    aw = request.args.get("artwork", "")
+    ar = request.args.get("artist", "")
     if QID_RE.match(aw):
         key = ("aw", aw)
     elif QID_RE.match(ar):
@@ -414,7 +439,7 @@ def resolve():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/surprise', methods=['GET'])
+@app.route("/surprise", methods=["GET"])
 def surprise():
     """Explore: a random painting (with image + creator) to jump to."""
     try:
@@ -438,17 +463,19 @@ def surprise():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/artwork-details', methods=['GET'])
+@app.route("/artwork-details", methods=["GET"])
 def artwork_details():
     """Return full details for one artwork + its artist (used while flipping)."""
-    artwork_id = request.args.get('artwork', '')
-    artist_id = request.args.get('artist', '')
+    artwork_id = request.args.get("artwork", "")
+    artist_id = request.args.get("artist", "")
 
     if not QID_RE.match(artwork_id) or not QID_RE.match(artist_id):
-        return jsonify({
-            "status": "error",
-            "message": "Invalid or missing artwork/artist id",
-        }), 400
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Invalid or missing artwork/artist id",
+            }
+        ), 400
 
     cache_key = (artwork_id, artist_id)
     cached = _details_cache.get(cache_key)
@@ -458,10 +485,12 @@ def artwork_details():
     try:
         artwork, artist = gather_details(artwork_id, artist_id)
         if not artwork and not artist:
-            return jsonify({
-                "status": "error",
-                "message": "No details found for this artwork",
-            }), 404
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": "No details found for this artwork",
+                }
+            ), 404
         payload = {
             "status": "success",
             "artwork": artwork,
@@ -471,30 +500,34 @@ def artwork_details():
             _cache_set(_details_cache, cache_key, payload)
         return jsonify(payload)
     except requests.exceptions.Timeout:
-        return jsonify({
-            "status": "error",
-            "message": "Wikidata took too long to respond. Please try again.",
-        }), 504
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Wikidata took too long to respond. Please try again.",
+            }
+        ), 504
     except Exception as e:
         print(f"Error in artwork_details: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/artwork-article', methods=['GET'])
+@app.route("/artwork-article", methods=["GET"])
 def artwork_article():
     """Return a short 'About' article for one artwork + its artist.
 
     Assembled deterministically from the Wikidata dossier — no model, no API key.
     Cached per artwork for the process lifetime.
     """
-    artwork_id = request.args.get('artwork', '')
-    artist_id = request.args.get('artist', '')
+    artwork_id = request.args.get("artwork", "")
+    artist_id = request.args.get("artist", "")
 
     if not QID_RE.match(artwork_id) or not QID_RE.match(artist_id):
-        return jsonify({
-            "status": "error",
-            "message": "Invalid or missing artwork/artist id",
-        }), 400
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Invalid or missing artwork/artist id",
+            }
+        ), 400
 
     cache_key = (artwork_id, artist_id)
     cached = _article_cache.get(cache_key)
@@ -516,29 +549,33 @@ def artwork_article():
             _cache_set(_article_cache, cache_key, payload)
         return jsonify(payload)
     except requests.exceptions.Timeout:
-        return jsonify({
-            "status": "error",
-            "message": "Wikidata took too long to respond. Please try again.",
-        }), 504
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Wikidata took too long to respond. Please try again.",
+            }
+        ), 504
     except Exception as e:
         print(f"Error in artwork_article: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/artwork-enrichment', methods=['GET'])
+@app.route("/artwork-enrichment", methods=["GET"])
 def artwork_enrichment():
     """Progressive enrichment layers (Wikipedia overview, other works, extra
     artwork facts, period/place framing) for the About panel. Fetched by the
     frontend AFTER the base article renders, so first paint stays fast. Cached
     per artwork for the process lifetime; reuses the warm details dossier."""
-    artwork_id = request.args.get('artwork', '')
-    artist_id = request.args.get('artist', '')
+    artwork_id = request.args.get("artwork", "")
+    artist_id = request.args.get("artist", "")
 
     if not QID_RE.match(artwork_id) or not QID_RE.match(artist_id):
-        return jsonify({
-            "status": "error",
-            "message": "Invalid or missing artwork/artist id",
-        }), 400
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Invalid or missing artwork/artist id",
+            }
+        ), 400
 
     cache_key = (artwork_id, artist_id)
     cached = _enrichment_cache.get(cache_key)
@@ -559,10 +596,12 @@ def artwork_enrichment():
             _cache_set(_enrichment_cache, cache_key, payload)
         return jsonify(payload)
     except requests.exceptions.Timeout:
-        return jsonify({
-            "status": "error",
-            "message": "A source took too long to respond. Please try again.",
-        }), 504
+        return jsonify(
+            {
+                "status": "error",
+                "message": "A source took too long to respond. Please try again.",
+            }
+        ), 504
     except Exception as e:
         print(f"Error in artwork_enrichment: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -609,6 +648,7 @@ def _wants_html(req):
 def _render_la_html(record, self_uri):
     """A minimal human-readable HTML representation at the same URI."""
     import html as _html
+
     label = _html.escape(str(record.get("_label", "Record")))
     rtype = _html.escape(str(record.get("type", "")))
     desc = ""
@@ -620,9 +660,13 @@ def _render_la_html(record, self_uri):
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{label} — Linked Art</title>
-<style>body{{font-family:system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}}
-h1{{margin-bottom:.2rem}} .t{{color:#666;font-size:.9rem}} pre{{background:#f5f5f5;padding:1rem;border-radius:8px;overflow:auto;font-size:.8rem}}
-a{{color:#2c5d8a}}</style></head>
+<style>
+body{{font-family:system-ui,sans-serif;max-width:820px;
+margin:2rem auto;padding:0 1rem;color:#1a1a1a}}
+h1{{margin-bottom:.2rem}} .t{{color:#666;font-size:.9rem}}
+pre{{background:#f5f5f5;padding:1rem;border-radius:8px;overflow:auto;font-size:.8rem}}
+a{{color:#2c5d8a}}
+</style></head>
 <body>
 <h1>{label}</h1>
 <p class="t">{rtype} · <a href="https://linked.art/">Linked Art</a> record</p>
@@ -657,7 +701,7 @@ def _dossier_or_facts(qid):
     return artwork, artist, artist_qid
 
 
-@app.route('/object/<qid>', methods=['GET'])
+@app.route("/object/<qid>", methods=["GET"])
 def linked_art_object(qid):
     """Linked Art (https://linked.art) HumanMadeObject record for an artwork."""
     self_uri = request.base_url
@@ -676,9 +720,14 @@ def linked_art_object(qid):
         summary = article_writer.build(artwork, artist)
         desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
         record = linked_art.object_record(
-            artwork, artist, base=base,
-            object_uri=f"{base}/object/{qid}", person_uri=person_uri,
-            artwork_qid=qid, artist_qid=artist_qid, description=desc,
+            artwork,
+            artist,
+            base=base,
+            object_uri=f"{base}/object/{qid}",
+            person_uri=person_uri,
+            artwork_qid=qid,
+            artist_qid=artist_qid,
+            description=desc,
         )
         with _cache_lock:
             _cache_set(_la_cache, ("object", qid), record)
@@ -690,7 +739,7 @@ def linked_art_object(qid):
         return _ld_response({"error": str(e)}, 500)
 
 
-@app.route('/visual/<qid>', methods=['GET'])
+@app.route("/visual/<qid>", methods=["GET"])
 def linked_art_visual(qid):
     """Linked Art VisualItem record — the subjects an artwork depicts."""
     self_uri = request.base_url
@@ -708,7 +757,9 @@ def linked_art_visual(qid):
         depicts_qids = [d["qid"] for d in artwork["depicts"] if d.get("qid")]
         entity_types = sparql_library.classify_entities(depicts_qids) if depicts_qids else {}
         record = linked_art.visual_record(
-            artwork, visual_uri=f"{base}/visual/{qid}", artwork_qid=qid,
+            artwork,
+            visual_uri=f"{base}/visual/{qid}",
+            artwork_qid=qid,
             entity_types=entity_types,
         )
         with _cache_lock:
@@ -721,7 +772,7 @@ def linked_art_visual(qid):
         return _ld_response({"error": str(e)}, 500)
 
 
-@app.route('/person/<qid>', methods=['GET'])
+@app.route("/person/<qid>", methods=["GET"])
 def linked_art_person(qid):
     """Linked Art (https://linked.art) Person record for an artist."""
     self_uri = request.base_url
@@ -736,7 +787,10 @@ def linked_art_person(qid):
             return _ld_response({"error": "person not found"}, 404)
         base = request.host_url.rstrip("/")
         record = linked_art.person_record(
-            artist, base=base, person_uri=f"{base}/person/{qid}", artist_qid=qid,
+            artist,
+            base=base,
+            person_uri=f"{base}/person/{qid}",
+            artist_qid=qid,
         )
         with _cache_lock:
             _cache_set(_la_cache, ("person", qid), record)
@@ -748,7 +802,7 @@ def linked_art_person(qid):
         return _ld_response({"error": str(e)}, 500)
 
 
-@app.route('/place/<qid>', methods=['GET'])
+@app.route("/place/<qid>", methods=["GET"])
 def linked_art_place(qid):
     """Linked Art Place record (with WKT geometry + Getty TGN equivalent)."""
     self_uri = request.base_url
@@ -773,7 +827,7 @@ def linked_art_place(qid):
         return _ld_response({"error": str(e)}, 500)
 
 
-@app.route('/group/<qid>', methods=['GET'])
+@app.route("/group/<qid>", methods=["GET"])
 def linked_art_group(qid):
     """Linked Art Group record (museum/collection/institution)."""
     self_uri = request.base_url
@@ -807,10 +861,10 @@ def add_header(response):
     Speed comes from the in-process caches (_day_cache/_details_cache/_article_cache),
     not the browser. Static files (the logo) are safe to cache for a day.
     """
-    if request.path.startswith('/static/'):
-        response.headers['Cache-Control'] = 'public, max-age=86400'
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
     else:
-        response.headers['Cache-Control'] = 'no-store'
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 

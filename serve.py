@@ -6,6 +6,7 @@ environment variable so it works locally and on most hosts.
 
     python serve.py
 """
+
 import os
 
 from waitress import serve

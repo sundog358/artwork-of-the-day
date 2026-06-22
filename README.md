@@ -121,16 +121,22 @@ python serve.py                   # production WSGI (Waitress) → http://127.0.
 It needs **no secrets**. Optional env vars (`AOTD_CONTACT`, rate limits, cache
 size) are in [.env.example](.env.example).
 
-## Tests
+## Quality
 
 ```bash
-pytest -q
+pytest -q          # 35 unit + integration tests (HTTP mocked)
+ruff check .       # lint
+ruff format .      # format
+mypy               # type-check the typed core modules
 ```
 
-A fast, no-network unit suite over the deterministic core — the property
-narrator, qualifier/date parsing, entity-card phrasing, and SPARQL value
-helpers (the logic the article's trustworthiness depends on). The same checks
-run in CI on every push.
+A fast, no-network suite covers the deterministic core (the property narrator,
+qualifier/date parsing, article assembly) and the **network-facing parsers**
+(Wikibase REST + SPARQL bindings, with HTTP mocked) — the parser modules sit at
+~88% coverage. CI runs **lint, format-check, type-check, and tests** on every
+push. The frontend adds **accessibility** (descriptive alt text, visible focus,
+ARIA state) and **SEO** (per-artwork Open Graph / Twitter tags + a
+`schema.org/VisualArtwork` block, so a shared link previews the actual painting).
 
 ## Deploy
 
