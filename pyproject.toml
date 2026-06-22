@@ -19,5 +19,14 @@ python_version = "3.10"
 ignore_missing_imports = true
 # Pragmatic: type-check the cleanly-typed modules; don't follow into the
 # (intentionally untyped) rest of the codebase.
-files = ["wikibase_rest.py", "wikidata_facts.py", "iiif.py"]
+files = [
+  "wikibase_rest.py",
+  "wikidata_facts.py",
+  "iiif.py",
+  "linked_art.py",
+  "article_writer.py",
+  "sparql_library.py",
+  "enrichment.py",
+  "app.py",
+]
 follow_imports = "silent"

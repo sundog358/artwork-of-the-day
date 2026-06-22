@@ -5,6 +5,7 @@ import re
 import threading
 from collections import OrderedDict
 from datetime import datetime
+from typing import Any
 
 import requests
 from flask import Flask, jsonify, make_response, request
@@ -53,7 +54,7 @@ app = Flask(__name__, static_folder="static")
 # buckets) and request.host_url/scheme reflect the public https origin.
 from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
 
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
 # --- Rate limiting --------------------------------------------------------- #
 # A generous per-IP default protects the Wikidata-hitting endpoints from abuse
@@ -73,7 +74,7 @@ _RL_DEFAULT = os.environ.get("AOTD_RATELIMIT_DEFAULT", "1200 per hour;120 per mi
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=_RL_DEFAULT.split(";"),
+    default_limits=_RL_DEFAULT.split(";"),  # type: ignore[arg-type]
     storage_uri=os.environ.get("AOTD_RATELIMIT_STORAGE", "memory://"),
     enabled=_RL_ENABLED,
 )
@@ -123,12 +124,12 @@ MAX_OFFSET = 300000
 # the first successful fetch of the day.
 _cache_lock = threading.Lock()
 _day_cache = {"date": None, "payload": None}  # single entry; no cap needed
-_details_cache = OrderedDict()
-_article_cache = OrderedDict()
-_enrichment_cache = OrderedDict()  # progressive enrichment payloads
-_date_cache = OrderedDict()  # galleries for a specific month/day (explore: pick a date)
-_resolve_cache = OrderedDict()  # explore: artwork/artist QID -> a displayable item
-_la_cache = OrderedDict()  # Linked Art records: (kind, qid) -> record dict
+_details_cache: "OrderedDict[Any, Any]" = OrderedDict()
+_article_cache: "OrderedDict[Any, Any]" = OrderedDict()
+_enrichment_cache: "OrderedDict[Any, Any]" = OrderedDict()  # progressive enrichment payloads
+_date_cache: "OrderedDict[Any, Any]" = OrderedDict()  # galleries for a month/day (explore)
+_resolve_cache: "OrderedDict[Any, Any]" = OrderedDict()  # explore: QID -> displayable item
+_la_cache: "OrderedDict[Any, Any]" = OrderedDict()  # Linked Art records: (kind, qid) -> record
 
 
 def run_sparql(query, timeout=45):

@@ -27,6 +27,30 @@ sentence is a real Wikidata fact or attributed Wikipedia text.
 
 ---
 
+## Case study — the 30-second version
+
+**The idea.** Wikidata holds millions of artworks, artists, places and movements
+as a structured graph — but it isn't something you'd *read*. The goal was to turn
+that graph into a polished, trustworthy daily art-history experience, and to do it
+*without* a language model, so nothing can be invented.
+
+**The key decision — grounded over generated.** Every sentence is assembled
+deterministically from a real Wikidata statement or attributed Wikipedia text (an
+earlier optional LLM layer was removed entirely). That single constraint forced
+the interesting engineering: a schema-agnostic narrator, multi-hop
+notability-ranked graph traversal, and a measured two-API hybrid — SPARQL for
+graph shape, the Wikibase REST API for qualifiers and references. The same facts
+are then *republished* as schema-valid **Linked Art** (CIDOC-CRM JSON-LD, 7
+dereferenceable record types, authority links to VIAF/Getty/ISNI) and **IIIF**
+manifests, so the output is interoperable open data rather than a silo.
+
+**The outcome.** A live, deployed product
+([metahistorybook.com](https://metahistorybook.com)) that doubles as a reusable
+narration engine — green CI (ruff · mypy across the codebase · 57 tests),
+accessibility, SEO, Docker, an IIIF deep-zoom viewer, and records validated
+against the official Linked Art JSON Schemas. The thesis in one line: **cited,
+deterministic and standards-compliant beats generated.**
+
 ## Why it's interesting
 
 This isn't a CRUD app — it's a small **knowledge-graph narration engine**. The

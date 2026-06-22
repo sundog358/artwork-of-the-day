@@ -1075,10 +1075,10 @@ def build_dossier(artwork_id, artist_id):
     ):
         # Influences and teachers/students are artists → openable in the explore view.
         open_as = "artist" if key in ("influencedBy", "teacher", "student") else None
-        for e in nb.get(key, [])[:10]:
-            _add_entity(e.get("label"), e.get("qid"), open_as)
-    for e in (artist.get("contemporaries") if artist else []) or []:
-        _add_entity(e.get("label"), e.get("qid"), "artist")
+        for ent in nb.get(key, [])[:10]:
+            _add_entity(ent.get("label"), ent.get("qid"), open_as)
+    for ent in (artist.get("contemporaries") if artist else []) or []:
+        _add_entity(ent.get("label"), ent.get("qid"), "artist")
 
     # Longest label first so multi-word names win over substrings when matching.
     entities = sorted(link_map.values(), key=lambda x: len(x["label"]), reverse=True)

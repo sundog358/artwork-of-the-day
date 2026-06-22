@@ -36,4 +36,4 @@ jobs:
         run: python -c "import app, serve, enrichment, sparql_library, wikidata_facts, wikibase_rest"
 
       - name: Run tests with coverage
-        run: pytest -q --cov=wikidata_facts --cov=wikibase_rest --cov=article_writer --cov=sparql_library --cov-report=term-missing
+        run: pytest -q --cov=wikidata_facts --cov=wikibase_rest --cov=article_writer --cov=sparql_library --cov=linked_art --cov=iiif --cov=app --cov-report=term-missing
