@@ -530,6 +530,78 @@
         margin-top: 6px;
       }
 
+      /* ---- Gallery (dark) mode: paintings on a museum wall ---------------- */
+      body.gallery {
+        background: #0f141a;
+      }
+      body.gallery .site-header h1,
+      body.gallery h2,
+      body.gallery h3,
+      body.gallery .artist-name {
+        color: #eef2f6;
+      }
+      body.gallery .artwork {
+        background: #161c24;
+        box-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+      }
+      body.gallery .artwork-info {
+        color: #d3dae1;
+      }
+      body.gallery .aotd-byline {
+        color: #aeb9c4;
+      }
+      body.gallery .aotd-byline .artist-name {
+        color: #7db4e0;
+      }
+      body.gallery .aotd-sec {
+        color: #8fb6da;
+      }
+      body.gallery .about-tag {
+        color: #8b97a3;
+      }
+      body.gallery .aotd-about {
+        background: #1b232d;
+        border-color: #2a3542;
+      }
+      body.gallery .aotd-about p {
+        color: #cdd5dd;
+      }
+      body.gallery .aotd-about .wd-link,
+      body.gallery .explore-link {
+        color: #86c0ec;
+        border-bottom-color: #3a5a76;
+      }
+      body.gallery .aotd-sources {
+        border-top-color: #2a3542;
+        color: #93a0ad;
+      }
+      body.gallery .occasion {
+        background: #16212c;
+        color: #d3dae1;
+        border-color: #2a3a49;
+      }
+      body.gallery .occasion .occasion-sub {
+        color: #8b97a3;
+      }
+      body.gallery .artist-section,
+      body.gallery .artwork-section {
+        background: #1b232d;
+        color: #cdd5dd;
+      }
+      body.gallery .wd-chip {
+        background: #243140;
+        color: #cfe0f2;
+        border-color: #34465a;
+      }
+      body.gallery .ctrl-btn.ghost {
+        color: #aeb9c4;
+        background: #1b232d;
+        border-color: #2a3542;
+      }
+      body.gallery .ctrl-date {
+        color: #aeb9c4;
+      }
+
       /* Narrow screens: stack image over info and allow normal scrolling. */
       @media (max-width: 860px) {
         body {
@@ -569,6 +641,7 @@
             <input type="date" id="date-pick" />
           </label>
           <button id="btn-today" class="ctrl-btn ghost" title="Back to today's pick">Today</button>
+          <button id="btn-theme" class="ctrl-btn ghost" title="Toggle gallery (dark) mode" aria-label="Toggle dark mode">🌙</button>
         </div>
       </header>
       <div id="occasion" class="occasion" style="display: none"></div>
@@ -1262,6 +1335,20 @@
         if (back) back.addEventListener("click", goBack);
         if (surprise) surprise.addEventListener("click", surpriseMe);
         if (today) today.addEventListener("click", fetchArtwork);
+
+        // Gallery (dark) mode — persisted across visits.
+        const themeBtn = document.getElementById("btn-theme");
+        const applyTheme = (on) => {
+          document.body.classList.toggle("gallery", on);
+          if (themeBtn) themeBtn.textContent = on ? "☀️" : "🌙";
+        };
+        applyTheme(localStorage.getItem("aotd-theme") === "gallery");
+        if (themeBtn)
+          themeBtn.addEventListener("click", () => {
+            const on = !document.body.classList.contains("gallery");
+            localStorage.setItem("aotd-theme", on ? "gallery" : "light");
+            applyTheme(on);
+          });
         if (dateInput) {
           // Fire on BOTH input and change: some browsers (and keyboard/calendar
           // interactions) only emit one of them. Guard so we fetch once per date.

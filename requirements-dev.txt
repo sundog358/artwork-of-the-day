@@ -1,4 +1,6 @@
 # Dev-only dependencies (not needed to run the app).
-# Used by validate_linked_art.py to check Linked Art records against the
-# official JSON Schemas in linked_art_schema/.
+# - jsonschema: validate_linked_art.py checks Linked Art records against the
+#   official JSON Schemas in linked_art_schema/.
+# - pytest: the unit suite in tests/ (also run in CI).
 jsonschema==4.26.0
+pytest==8.3.4
