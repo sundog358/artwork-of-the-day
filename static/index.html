@@ -386,13 +386,31 @@
       }
       .site-footer {
         flex: 0 0 auto;
-        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
         margin-top: 12px;
-        padding: 12px 16px;
+        padding: 10px 18px;
         background: #122438; /* midnight rain navy */
         color: #ffffff;
         border-radius: 8px;
         font-size: 0.84rem;
+      }
+      .footer-text {
+        text-align: left;
+        min-width: 0;
+      }
+      .footer-stamp {
+        flex: 0 0 auto;
+        width: 58px;
+        height: 58px;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      .footer-stamp:hover {
+        opacity: 1;
+        transform: rotate(-4deg) scale(1.04);
       }
       .site-footer a {
         color: #cfe0f2;
@@ -451,18 +469,32 @@
         </div>
       </div>
       <footer class="site-footer">
-        <div class="footer-copy">&copy; Sun &amp; Rain Works 2026</div>
-        <div class="footer-sub">
-          Data from
-          <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a>
-          (CC0), text from
-          <a href="https://en.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>
-          (CC BY-SA), images from
-          <a href="https://commons.wikimedia.org" target="_blank" rel="noopener"
-            >Wikimedia Commons</a
-          >&nbsp;·
-          <a href="/legal">Licenses &amp; attribution</a>
+        <div class="footer-text">
+          <div class="footer-copy">&copy; Sun &amp; Rain Works 2026</div>
+          <div class="footer-sub">
+            Data from
+            <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a>
+            (CC0), text from
+            <a href="https://en.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>
+            (CC BY-SA), images from
+            <a href="https://commons.wikimedia.org" target="_blank" rel="noopener"
+              >Wikimedia Commons</a
+            >&nbsp;·
+            <a href="/legal">Licenses &amp; attribution</a>
+          </div>
         </div>
+        <a
+          href="https://www.wikidata.org"
+          target="_blank"
+          rel="noopener"
+          title="Powered by Wikidata"
+        >
+          <img
+            src="/static/Wikidata_stamp.png"
+            alt="Powered by Wikidata"
+            class="footer-stamp"
+          />
+        </a>
       </footer>
     </div>
 
