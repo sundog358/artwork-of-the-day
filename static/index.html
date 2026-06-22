@@ -830,7 +830,12 @@
         const credit = sources
           ? `<p class="aotd-sources">Sources: ${sources} <span class="src-note">(Wikipedia text: CC BY-SA)</span></p>`
           : "";
-        slot.innerHTML = body + explore + credit;
+        // Data provenance: the catalogues Wikidata's statements are cited from.
+        const prov = (enr.provenance || []).map((p) => esc(p)).join(" · ");
+        const provenance = prov
+          ? `<p class="aotd-sources"><strong>Record cited from:</strong> ${prov}</p>`
+          : "";
+        slot.innerHTML = body + explore + provenance + credit;
       }
 
       // Wrap known entity labels in the text with links to Wikidata. Uses plain

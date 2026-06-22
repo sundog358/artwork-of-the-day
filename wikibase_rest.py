@@ -107,3 +107,36 @@ def dated_facts(qid, pid):
             out.append((lbl, s["start"], s["end"]))
     out.sort(key=lambda x: (x[1] == "", x[1]))
     return out
+
+
+def reference_sources(qid, limit=5):
+    """The data's PROVENANCE: distinct 'stated in' (P248) sources cited across an
+    entity's statement references, ranked by how often they're cited. Returns
+    [label]. The REST API exposes references natively, which SPARQL cannot do
+    cleanly. One statements call + a few label lookups, off WDQS."""
+    if not _QID.match(qid):
+        return []
+    data = _get(f"/entities/items/{qid}/statements")
+    if not data:
+        return []
+    counts = {}
+    for stmts in data.values():
+        for s in stmts:
+            for ref in s.get("references", []):
+                for part in ref.get("parts", []):
+                    if (part.get("property") or {}).get("id") == "P248":
+                        v = (part.get("value") or {}).get("content")
+                        if isinstance(v, str) and _QID.match(v):
+                            counts[v] = counts.get(v, 0) + 1
+    ranked = sorted(counts, key=lambda q: -counts[q])
+    lbls = labels(ranked[: limit + 4])
+    # Drop import-artefact "sources" that aren't real scholarship.
+    noise = ("freebase", "data dump", "wikimedia", "wikidata", "import")
+    out = []
+    for q in ranked:
+        lbl = lbls.get(q)
+        if lbl and not any(n in lbl.lower() for n in noise):
+            out.append(lbl)
+        if len(out) >= limit:
+            break
+    return out

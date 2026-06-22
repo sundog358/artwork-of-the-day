@@ -217,9 +217,11 @@ def build(artwork_id, artist_id, artwork, artist):
         "awk_wiki": lambda: wikipedia_summary(S.wikipedia_sitelink(artwork_id)),
         "art_wiki": lambda: wikipedia_summary(_wiki_title(artist.get("wikipedia"))),
         "ctx_wiki": (lambda: _context_wikipedia(context_qids)) if context_qids else (lambda: []),
-        # Dated facts come from the Wikibase REST API (qualifier spans, off-WDQS).
+        # Dated facts + provenance from the Wikibase REST API (off-WDQS; the REST
+        # API exposes qualifiers and references, which SPARQL handles clumsily).
         "events_dated": lambda: WR.dated_facts(artwork_id, "P793"),
         "awards_dated": lambda: WR.dated_facts(artist_id, "P166"),
+        "provenance": lambda: WR.reference_sources(artwork_id, limit=5),
         "same_collection": (lambda: S.notable_artworks_by([museum_qid], "P195", exclude=artwork_id, limit=5)) if museum_qid else (lambda: []),
         "same_movement": (lambda: S.notable_artworks_by(mv_qids, "P135", exclude=artwork_id, limit=5)) if mv_qids else (lambda: []),
         "depict_cards": (lambda: S.expand_entities(depict_ids)) if depict_ids else (lambda: {}),
@@ -481,4 +483,4 @@ def build(artwork_id, artist_id, artwork, artist):
                       "url": "https://commons.wikimedia.org/wiki/Category:" + ids["commons"].replace(" ", "_")})
 
     return {"sections": sections, "otherWorks": works, "sources": sources,
-            "entities": entities, "links": links}
+            "entities": entities, "links": links, "provenance": g("provenance", [])}
