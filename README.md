@@ -23,6 +23,8 @@ sentence is a real Wikidata fact or attributed Wikipedia text.
 | --- | --- |
 | ![Light mode](public/hero.jpeg) | ![Gallery mode](public/gallery.jpeg) |
 
+📍 **Roadmap:** [ROADMAP.md](ROADMAP.md) — what's shipped, what's next, and the deliberate non-goals.
+
 ---
 
 ## Why it's interesting
