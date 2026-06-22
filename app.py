@@ -611,11 +611,20 @@ _LA_CTX = linked_art.CONTEXT
 _LA_CONTENT_TYPE = f'application/ld+json; charset=utf-8; profile="{_LA_CTX}"'
 
 
+def _la_cors(resp):
+    """Linked Art records are open data meant for cross-origin, in-browser
+    consumers — allow any origin, and Vary on Accept since the same URI content-
+    negotiates between JSON-LD and HTML."""
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Vary"] = "Accept"
+    return resp
+
+
 def _ld_response(record, status=200):
     """Serialize a plain JSON-LD body (used for error payloads)."""
     resp = make_response(json.dumps(record, ensure_ascii=False, indent=2), status)
     resp.headers["Content-Type"] = "application/ld+json; charset=utf-8"
-    return resp
+    return _la_cors(resp)
 
 
 def _hal_links(self_uri):
@@ -683,12 +692,12 @@ def _serve_la(record, self_uri, status=200):
     """Serve a semantic Linked Art record: HTML or JSON-LD (with HAL envelope)
     per content negotiation."""
     if _wants_html(request):
-        return _render_la_html(record, self_uri)
+        return _la_cors(_render_la_html(record, self_uri))
     body = dict(record)
     body["_links"] = _hal_links(self_uri)
     resp = make_response(json.dumps(body, ensure_ascii=False, indent=2), status)
     resp.headers["Content-Type"] = _LA_CONTENT_TYPE
-    return resp
+    return _la_cors(resp)
 
 
 def _dossier_or_facts(qid):

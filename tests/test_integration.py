@@ -8,11 +8,24 @@ so they're deterministic and fast.
 
 import responses
 
+import app as APP
 import sparql_library as S
 import wikibase_rest as WR
 import wikidata_facts as WF
 
 REST = "https://www.wikidata.org/w/rest.php/wikibase/v1"
+
+
+def test_linked_art_endpoints_send_cors_and_vary():
+    """Linked Art records are open cross-origin data — an invalid id short-circuits
+    to a 400 (no network) and must still carry the CORS + Vary headers."""
+    APP.app.config["TESTING"] = True
+    client = APP.app.test_client()
+    resp = client.get("/object/notaqid")
+    assert resp.status_code == 400
+    assert resp.headers.get("Access-Control-Allow-Origin") == "*"
+    assert "Accept" in (resp.headers.get("Vary") or "")
+    assert resp.headers.get("Content-Type", "").startswith("application/ld+json")
 
 
 @responses.activate
