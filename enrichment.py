@@ -191,7 +191,7 @@ def build(artwork_id, artist_id, artwork, artist):
                         f"which holds {top['n']} of their paintings.")
         sections.append({"heading": "Where the artist's work is held", "paragraphs": held})
 
-    # --- 2c. Genre, movement & training tradition ------------------------- #
+    # --- 2c. Genre, movement & training tradition (what it is) ------------ #
     trad = S.artist_traditions(artist_id)
     tradition = []
     for g in trad["genres"][:2]:
@@ -205,6 +205,56 @@ def build(artwork_id, artist_id, artwork, artist):
             tradition.append(f"{name} trained at {ed['label']}, {_a_or_an(ed['description'])} {ed['description']}.")
     if tradition:
         sections.append({"heading": "Genre and tradition", "paragraphs": tradition[:4]})
+
+    # --- 2d. Lineage & peers (hop-2: who else, ranked by notability) ------ #
+    def _people(rel_label_phrase, items):
+        # narrate a clickable list of artists and register them for explore links
+        if not items:
+            return None
+        for e in items:
+            entities.append({"label": e["label"], "qid": e["qid"], "open": "artist"})
+        return rel_label_phrase + _and_list([e["label"] for e in items]) + "."
+
+    lineage = []
+    teacher_qids = [t["qid"] for t in trad["teachers"]]
+    if teacher_qids:
+        cohort = S.notable_by_property(teacher_qids, "P1066", exclude=artist_id, limit=6)
+        s = _people(f"In {trad['teachers'][0]['label']}'s circle of pupils, {name} trained alongside ", cohort)
+        if s:
+            lineage.append(s)
+    school_qids = [e["qid"] for e in trad["education"]]
+    if school_qids:
+        alumni = S.notable_by_property(school_qids, "P69", exclude=artist_id, limit=6, painter_only=True)
+        s = _people(f"Fellow students at the {trad['education'][0]['label']} included ", alumni)
+        if s:
+            lineage.append(s)
+    nat = trad["nationality"][0]["qid"] if trad["nationality"] else ""
+    genre_qids = [g["qid"] for g in trad["genres"]]
+    if genre_qids and nat:
+        peers = S.genre_peers(genre_qids, nat, exclude=artist_id, limit=6)
+        s = _people("Other notable painters working in the same genre include ", peers)
+        if s:
+            lineage.append(s)
+    mv_qids = [m["qid"] for m in trad["movements"]]
+    if mv_qids:
+        members = S.notable_by_property(mv_qids, "P135", exclude=artist_id, limit=6)
+        s = _people("Other artists of the movement include ", members)
+        if s:
+            lineage.append(s)
+    if lineage:
+        sections.append({"heading": "Lineage and peers", "paragraphs": lineage})
+
+    # --- 2e. The museum, in depth (hop-2 on the holding institution) ------ #
+    museum_qid = artwork.get("locationQid") or ((artwork.get("collection") or [{}])[0] or {}).get("qid")
+    if museum_qid:
+        mcard = S.expand_entities([museum_qid]).get(museum_qid)
+        if mcard:
+            inc = (mcard.get("inception") or "")[:4]
+            if inc.isdigit():
+                mlabel, desc = mcard.get("label") or "the museum", mcard.get("description")
+                sent = f"Founded in {inc}, {mlabel}"
+                sent += f" is {_a_or_an(desc)} {desc}." if desc else "."
+                sections.append({"heading": "The museum", "paragraphs": [sent]})
 
     # --- 3. Richer artwork facts ------------------------------------------ #
     ctx = S.artwork_context(artwork_id)

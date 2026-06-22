@@ -599,20 +599,22 @@ def artist_identifiers(artist_id):
 
 
 def artist_traditions(artist_id):
-    """The traditions an artist belongs to: genres (P136), movements (P135), and
-    schools/academies they trained at (P69) — each with a Wikidata description so
-    the prose can explain what the genre/movement/school *is*. Returns
-    {genres, movements, education} as [{qid, label, description}] lists."""
-    out = {"genres": [], "movements": [], "education": []}
+    """The traditions an artist belongs to: genres (P136), movements (P135),
+    schools/academies they trained at (P69), and teachers (P1066, 'student of') —
+    each with a Wikidata description, and the seeds for the hop-2 lineage layers.
+    Returns {genres, movements, education, teachers} as [{qid, label, description}]."""
+    out = {"genres": [], "movements": [], "education": [], "teachers": [], "nationality": []}
     if not QID_RE.match(artist_id):
         return out
     query = """
     SELECT ?rel ?v ?vLabel ?vDescription WHERE {
-      VALUES (?rel ?p) { ("genres" wdt:P136) ("movements" wdt:P135) ("education" wdt:P69) }
+      VALUES (?rel ?p) { ("genres" wdt:P136) ("movements" wdt:P135)
+                         ("education" wdt:P69) ("teachers" wdt:P1066)
+                         ("nationality" wdt:P27) }
       wd:%s ?p ?v.
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
-    LIMIT 40
+    LIMIT 60
     """ % artist_id
     try:
         rows = run_sparql(query, timeout=25)
@@ -708,6 +710,88 @@ def expand_entities(qids):
             "country": _v(r, "country"),
             "admin": _v(r, "admin"),
         }
+    return out
+
+
+def notable_by_property(seed_qids, pid, exclude="", limit=6, painter_only=False, min_links=4):
+    """Hop-2 traversal: entities that point to a seed via `pid` (e.g. students of
+    a teacher, alumni of a school, members of a movement, painters in a genre),
+    ranked by Wikidata sitelink count as a notability proxy so we surface the
+    famous names, not the long tail. Returns [{qid, label}].
+
+    Pattern is reverse: `?x wdt:PID ?seed`. min_links prunes obscure entities up
+    front so ORDER BY over a big set stays fast."""
+    valid = [q for q in dict.fromkeys(seed_qids) if QID_RE.match(q)]
+    if not valid:
+        return []
+    values = " ".join(f"wd:{q}" for q in valid)
+    painter = "?x wdt:P106 wd:Q1028181." if painter_only else ""
+    excl = f"FILTER(?x != wd:{exclude})" if QID_RE.match(exclude) else ""
+    query = """
+    SELECT ?x ?xLabel (MAX(?sl) AS ?links) WHERE {
+      VALUES ?seed { %s }
+      ?x wdt:%s ?seed.
+      %s
+      ?x wikibase:sitelinks ?sl.
+      FILTER(?sl >= %d)
+      %s
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?x ?xLabel
+    ORDER BY DESC(?links)
+    LIMIT %d
+    """ % (values, pid, painter, min_links, excl, limit * 2)
+    try:
+        rows = run_sparql(query, timeout=40)
+    except Exception as e:
+        print(f"notable_by_property({pid}) error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        q, label = qid(_v(r, "x")), _v(r, "xLabel")
+        if q and label and not QID_RE.match(label) and q not in seen:
+            seen.add(q)
+            out.append({"qid": q, "label": label})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def genre_peers(genre_qids, nationality_qid, exclude="", limit=6, min_links=4):
+    """Notable painters who share the artwork's genre AND the artist's nationality,
+    ranked by notability — 'American portraitists like Sargent, Whistler…'. The
+    nationality constraint keeps it relevant (not just the most famous painters of
+    all time) and the result set small enough to rank quickly. Returns [{qid,label}]."""
+    genres = [q for q in dict.fromkeys(genre_qids) if QID_RE.match(q)]
+    if not genres or not QID_RE.match(nationality_qid):
+        return []
+    values = " ".join(f"wd:{q}" for q in genres)
+    excl = f"FILTER(?x != wd:{exclude})" if QID_RE.match(exclude) else ""
+    query = """
+    SELECT ?x ?xLabel (MAX(?sl) AS ?links) WHERE {
+      VALUES ?genre { %s }
+      ?x wdt:P136 ?genre; wdt:P106 wd:Q1028181; wdt:P27 wd:%s; wikibase:sitelinks ?sl.
+      FILTER(?sl >= %d)
+      %s
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?x ?xLabel
+    ORDER BY DESC(?links)
+    LIMIT %d
+    """ % (values, nationality_qid, min_links, excl, limit * 2)
+    try:
+        rows = run_sparql(query, timeout=40)
+    except Exception as e:
+        print(f"genre_peers error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        q, label = qid(_v(r, "x")), _v(r, "xLabel")
+        if q and label and not QID_RE.match(label) and q not in seen:
+            seen.add(q)
+            out.append({"qid": q, "label": label})
+        if len(out) >= limit:
+            break
     return out
 
 
