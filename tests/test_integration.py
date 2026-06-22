@@ -9,11 +9,111 @@ so they're deterministic and fast.
 import responses
 
 import app as APP
+import iiif as IIIF
+import linked_art as LA
 import sparql_library as S
 import wikibase_rest as WR
 import wikidata_facts as WF
 
 REST = "https://www.wikidata.org/w/rest.php/wikibase/v1"
+
+
+def test_person_record_carries_authority_equivalents():
+    """VIAF / Getty ULAN / RKD / ISNI ids become `equivalent` references."""
+    artist = {
+        "name": "Leonardo da Vinci",
+        "viaf": "24604287",
+        "ulan": "500010879",
+        "isni": "0000 0001 2122 5050",
+    }
+    rec = LA.person_record(
+        artist, base="https://x.org", person_uri="https://x.org/person/Q762", artist_qid="Q762"
+    )
+    ids = {e["id"] for e in rec["equivalent"]}
+    assert "http://www.wikidata.org/entity/Q762" in ids
+    assert "https://viaf.org/viaf/24604287" in ids
+    assert "http://vocab.getty.edu/ulan/500010879" in ids
+    assert "https://isni.org/isni/0000000121225050" in ids  # spaces stripped
+
+
+def test_concept_record_links_wikidata_and_aat():
+    rec = LA.concept_record(
+        {"name": "Italian Renaissance", "description": "art movement", "aat": "300021140"},
+        concept_uri="https://x.org/concept/Q1474884",
+        concept_qid="Q1474884",
+    )
+    assert rec["type"] == "Type"
+    ids = {e["id"] for e in rec["equivalent"]}
+    assert "http://vocab.getty.edu/aat/300021140" in ids
+
+
+def test_set_record_is_a_collection():
+    rec = LA.set_record(
+        {"name": "Louvre", "description": "museum in Paris"},
+        set_uri="https://x.org/set/Q19675",
+        set_qid="Q19675",
+    )
+    assert rec["type"] == "Set"
+    assert "Collection of Louvre" in rec["_label"]
+    assert rec["classified_as"][0]["id"].endswith("/300025976")
+
+
+def test_object_record_models_events_member_of_and_iiif():
+    artwork = {
+        "title": "Mona Lisa",
+        "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Mona%20Lisa.jpg?width=800",
+        "collection": [{"qid": "Q19675", "label": "Louvre"}],
+        "activities": [{"kind": "event", "label": "theft", "start": "1911", "end": "1913"}],
+    }
+    rec = LA.object_record(
+        artwork,
+        {},
+        base="https://x.org",
+        object_uri="https://x.org/object/Q12418",
+        person_uri=None,
+        artwork_qid="Q12418",
+        artist_qid="",
+    )
+    assert rec["member_of"][0]["id"] == "https://x.org/set/Q19675"
+    assert rec["used_for"][0]["_label"] == "theft"
+    assert rec["used_for"][0]["timespan"]["begin_of_the_begin"].startswith("1911")
+    # representation carries both the image and the IIIF manifest pointer
+    shown = rec["representation"][0]["digitally_shown_by"]
+    assert any("/iiif/Q12418/manifest.json" in d["access_point"][0]["id"] for d in shown)
+
+
+@responses.activate
+def test_iiif_manifest_builds_from_commons_imageinfo():
+    responses.add(
+        responses.GET,
+        IIIF._COMMONS_API,
+        json={
+            "query": {
+                "pages": {
+                    "-1": {
+                        "imageinfo": [
+                            {
+                                "url": "https://upload.wikimedia.org/x/Mona_Lisa.jpg",
+                                "width": 7601,
+                                "height": 11348,
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+    )
+    man = IIIF.manifest(
+        title="Mona Lisa",
+        manifest_uri="https://x.org/iiif/Q12418/manifest.json",
+        image_filepath="https://commons.wikimedia.org/wiki/Special:FilePath/Mona%20Lisa.jpg?width=800",
+        metadata=[("Artist", "Leonardo da Vinci"), ("Date", "")],
+    )
+    canvas = man["items"][0]
+    assert man["type"] == "Manifest"
+    assert (canvas["width"], canvas["height"]) == (7601, 11348)
+    assert canvas["items"][0]["items"][0]["body"]["id"].endswith("Mona_Lisa.jpg")
+    assert len(man["metadata"]) == 1  # empty Date dropped
 
 
 def test_linked_art_endpoints_send_cors_and_vary():

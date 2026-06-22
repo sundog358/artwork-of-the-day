@@ -39,8 +39,10 @@ _load_dotenv()
 
 import article_writer  # noqa: E402  (imported after .env is loaded)
 import enrichment  # noqa: E402
+import iiif  # noqa: E402
 import linked_art  # noqa: E402
 import sparql_library  # noqa: E402
+import wikibase_rest  # noqa: E402
 
 QID_RE = re.compile(r"^Q\d+$")
 
@@ -627,6 +629,16 @@ def _ld_response(record, status=200):
     return _la_cors(resp)
 
 
+def _iiif_response(record, status=200):
+    """Serve a IIIF Presentation 3.0 manifest (CORS-enabled, per the IIIF spec)."""
+    resp = make_response(json.dumps(record, ensure_ascii=False, indent=2), status)
+    resp.headers["Content-Type"] = (
+        "application/ld+json; charset=utf-8; "
+        'profile="http://iiif.io/api/presentation/3/context.json"'
+    )
+    return _la_cors(resp)
+
+
 def _hal_links(self_uri):
     """The spec's non-semantic HAL '_links' envelope (added outside the
     schema-validated semantic body)."""
@@ -710,6 +722,17 @@ def _dossier_or_facts(qid):
     return artwork, artist, artist_qid
 
 
+def _object_activities(qid):
+    """Dated exhibitions (P608) and significant events (P793) for an artwork, as
+    {kind,label,start,end} dicts — the Linked Art object renders these as CIDOC-CRM
+    `used_for` Activities. Degrades to [] (the REST helper swallows failures)."""
+    acts = []
+    for kind, pid in (("exhibition", "P608"), ("event", "P793")):
+        for label, start, end in wikibase_rest.dated_facts(qid, pid):
+            acts.append({"kind": kind, "label": label, "start": start, "end": end})
+    return acts
+
+
 @app.route("/object/<qid>", methods=["GET"])
 def linked_art_object(qid):
     """Linked Art (https://linked.art) HumanMadeObject record for an artwork."""
@@ -728,6 +751,7 @@ def linked_art_object(qid):
         # Grounded Wikidata summary as the description.
         summary = article_writer.build(artwork, artist)
         desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
+        artwork["activities"] = _object_activities(qid)
         record = linked_art.object_record(
             artwork,
             artist,
@@ -858,6 +882,104 @@ def linked_art_group(qid):
         return _ld_response({"error": "Wikidata timeout"}, 504)
     except Exception as e:
         print(f"Error in linked_art_group: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route("/concept/<qid>", methods=["GET"])
+def linked_art_concept(qid):
+    """Linked Art Concept (Type) record — a movement, genre or technique."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid concept id"}, 400)
+    cached = _la_cache.get(("concept", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        facts = sparql_library.concept_facts(qid)
+        if not facts:
+            return _ld_response({"error": "concept not found"}, 404)
+        base = request.host_url.rstrip("/")
+        record = linked_art.concept_record(
+            facts, concept_uri=f"{base}/concept/{qid}", concept_qid=qid
+        )
+        with _cache_lock:
+            _cache_set(_la_cache, ("concept", qid), record)
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_concept: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route("/set/<qid>", methods=["GET"])
+def linked_art_set(qid):
+    """Linked Art Set record — the holdings (collection) of an institution."""
+    self_uri = request.base_url
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid set id"}, 400)
+    cached = _la_cache.get(("set", qid))
+    if cached:
+        return _serve_la(cached, self_uri)
+    try:
+        facts = sparql_library.group_facts(qid)
+        if not facts:
+            return _ld_response({"error": "set not found"}, 404)
+        base = request.host_url.rstrip("/")
+        record = linked_art.set_record(facts, set_uri=f"{base}/set/{qid}", set_qid=qid)
+        with _cache_lock:
+            _cache_set(_la_cache, ("set", qid), record)
+        return _serve_la(record, self_uri)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in linked_art_set: {e}")
+        return _ld_response({"error": str(e)}, 500)
+
+
+@app.route("/iiif/<qid>/manifest.json", methods=["GET"])
+def iiif_manifest(qid):
+    """IIIF Presentation 3.0 manifest for an artwork — a zoomable canvas any
+    IIIF viewer (and the in-app deep-zoom lightbox) can consume."""
+    if not QID_RE.match(qid):
+        return _ld_response({"error": "invalid object id"}, 400)
+    cached = _la_cache.get(("iiif", qid))
+    if cached:
+        return _iiif_response(cached)
+    try:
+        artwork = sparql_library.artwork_facts(qid)
+        if not artwork or not artwork.get("image"):
+            return _ld_response({"error": "no image for this object"}, 404)
+        base = request.host_url.rstrip("/")
+        artist_qid = sparql_library.creator_of(qid)
+        artist_name = ""
+        if artist_qid:
+            artist_name = (sparql_library.artist_facts(artist_qid) or {}).get("name", "")
+        record = iiif.manifest(
+            title=artwork.get("title") or "Untitled",
+            manifest_uri=f"{base}/iiif/{qid}/manifest.json",
+            image_filepath=artwork["image"],
+            summary=artwork.get("genre") if artwork.get("genre") != "Unknown" else "",
+            metadata=[
+                ("Artist", artist_name),
+                ("Date", artwork.get("creationDate")),
+                ("Medium", artwork.get("medium") if artwork.get("medium") != "Unknown" else ""),
+                (
+                    "Held at",
+                    artwork.get("location") if artwork.get("location") != "Unknown" else "",
+                ),
+            ],
+            attribution="Image via Wikimedia Commons. Data from Wikidata.",
+        )
+        if not record:
+            return _ld_response({"error": "image dimensions unavailable"}, 404)
+        with _cache_lock:
+            _cache_set(_la_cache, ("iiif", qid), record)
+        return _iiif_response(record)
+    except requests.exceptions.Timeout:
+        return _ld_response({"error": "Wikidata timeout"}, 504)
+    except Exception as e:
+        print(f"Error in iiif_manifest: {e}")
         return _ld_response({"error": str(e)}, 500)
 
 

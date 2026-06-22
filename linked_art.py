@@ -176,6 +176,63 @@ def _wd_equivalent(qid, type_):
     return {"id": _wd(qid), "type": type_}
 
 
+# Authority-file id → canonical URI. Each becomes an `equivalent` reference so a
+# consumer can pivot from our record to VIAF / Getty / ISNI / GeoNames / RKD.
+_AUTHORITY = {
+    "viaf": ("https://viaf.org/viaf/{}", None),
+    "ulan": ("http://vocab.getty.edu/ulan/{}", None),
+    "tgn": ("http://vocab.getty.edu/tgn/{}", None),
+    "rkd": ("https://rkd.nl/en/explore/artists/{}", None),
+    "isni": ("https://isni.org/isni/{}", lambda v: v.replace(" ", "")),
+    "geonames": ("https://sws.geonames.org/{}/", None),
+}
+
+
+def _equivalents(qid, type_, label, facts, keys):
+    """[Wikidata entity] + every present authority id, as `equivalent` refs."""
+    out = [{"id": _wd(qid), "type": type_, "_label": label}]
+    for k in keys:
+        v = _clean(facts.get(k))
+        if not v:
+            continue
+        tmpl, fn = _AUTHORITY[k]
+        out.append({"id": tmpl.format(fn(v) if fn else v), "type": type_})
+    return out
+
+
+def _year_span(start, end):
+    """A TimeSpan from year strings (e.g. '1911', '1913'), with a display name."""
+    s, e = _clean(start), _clean(end)
+    if not s and not e:
+        return None
+    ts = {"type": "TimeSpan"}
+    if s:
+        ts["begin_of_the_begin"] = f"{s}-01-01T00:00:00Z" if len(s) == 4 else s
+    if e:
+        ts["end_of_the_end"] = f"{e}-12-31T23:59:59Z" if len(e) == 4 else e
+    disp = f"{s}–{e}" if (s and e and s != e) else (s or e)
+    ts["identified_by"] = [
+        {"type": "Name", "content": disp, "classified_as": [_aat("300404669", "Display Title")]}
+    ]
+    return ts
+
+
+def _activity(label, start, end, aat_num, aat_label):
+    """A CIDOC-CRM Activity the object `used_for` (exhibition, significant event)."""
+    act = {"type": "Activity", "_label": label, "classified_as": [_aat(aat_num, aat_label)]}
+    span = _year_span(start, end)
+    if span:
+        act["timespan"] = span
+    return act
+
+
+# Linked Art `used_for` activity kinds we surface, with their Getty AAT type.
+_ACTIVITY_AAT = {
+    "exhibition": ("300054766", "Exhibition"),
+    "event": ("300069103", "Event"),
+}
+
+
 # --------------------------------------------------------------------------- #
 # HumanMadeObject                                                              #
 # --------------------------------------------------------------------------- #
@@ -198,7 +255,9 @@ def object_record(
     ]
     if artwork.get("genreQid"):
         classified.append(
-            _concept(_wd(artwork["genreQid"]), _clean(artwork.get("genre")) or "genre")
+            _concept(
+                f"{base}/concept/{artwork['genreQid']}", _clean(artwork.get("genre")) or "genre"
+            )
         )
 
     rec = {
@@ -245,9 +304,24 @@ def object_record(
         rec["current_location"] = loc
     coll = artwork.get("collection") or []
     if coll and coll[0].get("qid"):
-        owner = _group_ref(base, coll[0]["qid"], coll[0].get("label"))
+        cq = coll[0]["qid"]
+        cl = _clean(coll[0].get("label")) or "a collection"
+        owner = _group_ref(base, cq, coll[0].get("label"))
         if owner:
             rec["current_owner"] = [owner]
+        # the object is a member of that institution's collection Set
+        rec["member_of"] = [
+            {"id": f"{base}/set/{cq}", "type": "Set", "_label": f"Collection of {cl}"}
+        ]
+
+    # Exhibitions and significant events the object was used for (CIDOC-CRM
+    # Activities, dated from REST qualifiers upstream).
+    used = []
+    for a in artwork.get("activities") or []:
+        num, lbl = _ACTIVITY_AAT.get(a.get("kind", "event"), _ACTIVITY_AAT["event"])
+        used.append(_activity(a.get("label") or lbl, a.get("start"), a.get("end"), num, lbl))
+    if used:
+        rec["used_for"] = used
 
     if artwork.get("depicts"):
         rec["shows"] = [
@@ -260,18 +334,30 @@ def object_record(
 
     image = _clean(artwork.get("image"))
     if image:
+        shown_by = [
+            {
+                "type": "DigitalObject",
+                "_label": "Image file",
+                "format": "image/jpeg",
+                "access_point": [{"id": image, "type": "DigitalObject"}],
+            },
+            {
+                "type": "DigitalObject",
+                "_label": f"IIIF Presentation manifest for {title}",
+                "format": 'application/ld+json;profile="http://iiif.io/api/presentation/3/context.json"',
+                "conforms_to": [
+                    {"id": "http://iiif.io/api/presentation", "type": "InformationObject"}
+                ],
+                "access_point": [
+                    {"id": f"{base}/iiif/{artwork_qid}/manifest.json", "type": "DigitalObject"}
+                ],
+            },
+        ]
         rec["representation"] = [
             {
                 "type": "VisualItem",
                 "_label": f"Digital image of {title}",
-                "digitally_shown_by": [
-                    {
-                        "type": "DigitalObject",
-                        "_label": "Image file",
-                        "format": "image/jpeg",
-                        "access_point": [{"id": image, "type": "DigitalObject"}],
-                    }
-                ],
+                "digitally_shown_by": shown_by,
             }
         ]
 
@@ -347,7 +433,9 @@ def person_record(artist, *, base, person_uri, artist_qid, description=""):
     if desc:
         rec["referred_to_by"] = [_description(desc)]
 
-    rec["equivalent"] = [{"id": _wd(artist_qid), "type": "Person", "_label": name}]
+    rec["equivalent"] = _equivalents(
+        artist_qid, "Person", name, artist, ["viaf", "ulan", "rkd", "isni"]
+    )
     return rec
 
 
@@ -369,10 +457,7 @@ def place_record(place, *, place_uri, place_qid):
     wkt = _clean(place.get("wkt"))
     if wkt:
         rec["defined_by"] = wkt
-    equivalent = [{"id": _wd(place_qid), "type": "Place", "_label": name}]
-    if _clean(place.get("tgn")):
-        equivalent.append({"id": f"http://vocab.getty.edu/tgn/{place['tgn']}", "type": "Place"})
-    rec["equivalent"] = equivalent
+    rec["equivalent"] = _equivalents(place_qid, "Place", name, place, ["tgn", "geonames"])
     return rec
 
 
@@ -396,8 +481,47 @@ def group_record(group, *, group_uri, group_qid):
         ts = _timespan(inception, inception[:4])
         if ts:
             rec["formed_by"] = {"type": "Formation", "timespan": ts}
-    equivalent = [{"id": _wd(group_qid), "type": "Group", "_label": name}]
-    if _clean(group.get("ulan")):
-        equivalent.append({"id": f"http://vocab.getty.edu/ulan/{group['ulan']}", "type": "Group"})
+    rec["equivalent"] = _equivalents(group_qid, "Group", name, group, ["ulan", "viaf", "isni"])
+    return rec
+
+
+# --------------------------------------------------------------------------- #
+# Concept (Type) — movements, genres, techniques                              #
+# --------------------------------------------------------------------------- #
+def concept_record(concept, *, concept_uri, concept_qid):
+    name = concept.get("name") or "Concept"
+    rec = {
+        "@context": CONTEXT,
+        "id": concept_uri,
+        "type": "Type",
+        "_label": name,
+        "identified_by": [_name(name)],
+    }
+    desc = _clean(concept.get("description"))
+    if desc:
+        rec["referred_to_by"] = [_description(desc)]
+    equivalent = [{"id": _wd(concept_qid), "type": "Type", "_label": name}]
+    if _clean(concept.get("aat")):  # cross-walk to the Getty AAT vocabulary
+        equivalent.append({"id": _AAT + concept["aat"], "type": "Type"})
     rec["equivalent"] = equivalent
+    return rec
+
+
+# --------------------------------------------------------------------------- #
+# Set — a collection (the holdings of an institution)                          #
+# --------------------------------------------------------------------------- #
+def set_record(group, *, set_uri, set_qid):
+    name = group.get("name") or "a collection"
+    label = f"Collection of {name}"
+    rec = {
+        "@context": CONTEXT,
+        "id": set_uri,
+        "type": "Set",
+        "_label": label,
+        "identified_by": [_name(label)],
+        "classified_as": [_aat("300025976", "Collection")],
+    }
+    desc = _clean(group.get("description"))
+    body = f"The art collection of {name}." + (f" {desc}" if desc else "")
+    rec["referred_to_by"] = [_description(body)]
     return rec

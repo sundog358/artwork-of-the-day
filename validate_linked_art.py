@@ -65,6 +65,8 @@ def build_records():
     artwork, artist = sl.build_dossier(aw_qid, artist_qid)
     summary = article_writer.build(artwork, artist, generate=False)
     desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
+    # Exercise the object's `used_for` activities (provenance / event history).
+    artwork["activities"] = [{"kind": "event", "label": "theft", "start": "1911", "end": "1913"}]
 
     obj = la.object_record(
         artwork,
@@ -95,6 +97,12 @@ def build_records():
     grp = la.group_record(
         sl.group_facts("Q19675"), group_uri=f"{BASE}/group/Q19675", group_qid="Q19675"
     )
+    con = la.concept_record(
+        sl.concept_facts("Q1474884"),  # Italian Renaissance
+        concept_uri=f"{BASE}/concept/Q1474884",
+        concept_qid="Q1474884",
+    )
+    st = la.set_record(sl.group_facts("Q19675"), set_uri=f"{BASE}/set/Q19675", set_qid="Q19675")
 
     return [
         ("object.json", "HumanMadeObject (Mona Lisa)", obj),
@@ -102,6 +110,8 @@ def build_records():
         ("person.json", "Person (Leonardo da Vinci)", per),
         ("place.json", "Place (Paris)", plc),
         ("group.json", "Group (Louvre)", grp),
+        ("concept.json", "Concept (Italian Renaissance)", con),
+        ("set.json", "Set (Louvre collection)", st),
     ]
 
 

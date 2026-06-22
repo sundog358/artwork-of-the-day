@@ -174,13 +174,17 @@ def artist_facts(artist_id):
     query = (
         """
     SELECT ?artistLabel ?artistDescription ?birth ?death ?birthPlace ?birthPlaceLabel
-           ?deathPlace ?deathPlaceLabel ?image ?article WHERE {
+           ?deathPlace ?deathPlaceLabel ?image ?article ?viaf ?ulan ?rkd ?isni WHERE {
       BIND(wd:%s AS ?artist)
       OPTIONAL { ?artist wdt:P569 ?birth. }
       OPTIONAL { ?artist wdt:P570 ?death. }
       OPTIONAL { ?artist wdt:P19 ?birthPlace. }
       OPTIONAL { ?artist wdt:P20 ?deathPlace. }
       OPTIONAL { ?artist wdt:P18 ?image. }
+      OPTIONAL { ?artist wdt:P214 ?viaf. }     # VIAF authority id
+      OPTIONAL { ?artist wdt:P245 ?ulan. }     # Getty ULAN id
+      OPTIONAL { ?artist wdt:P650 ?rkd. }      # RKDartists id
+      OPTIONAL { ?artist wdt:P213 ?isni. }     # ISNI
       OPTIONAL { ?article schema:about ?artist; schema:isPartOf <https://en.wikipedia.org/>. }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
@@ -214,6 +218,10 @@ def artist_facts(artist_id):
         "deathPlaceQid": _qid_of(r, "deathPlace"),
         "image": commons_thumb(_v(r, "image")),
         "wikipedia": _v(r, "article"),
+        "viaf": _v(r, "viaf"),  # authority ids → Linked Art `equivalent`
+        "ulan": _v(r, "ulan"),
+        "rkd": _v(r, "rkd"),
+        "isni": _v(r, "isni"),
         "_birthYear": birth_year,
     }
 
@@ -240,10 +248,11 @@ def place_facts(place_qid):
         return {}
     query = (
         """
-    SELECT ?placeLabel ?placeDescription ?coord ?tgn ?typeLabel WHERE {
+    SELECT ?placeLabel ?placeDescription ?coord ?tgn ?geonames ?typeLabel WHERE {
       BIND(wd:%s AS ?place)
       OPTIONAL { ?place wdt:P625 ?coord. }     # coordinate location
       OPTIONAL { ?place wdt:P1667 ?tgn. }      # Getty TGN ID
+      OPTIONAL { ?place wdt:P1566 ?geonames. } # GeoNames ID
       OPTIONAL { ?place wdt:P31 ?type. }       # instance of (e.g. city)
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
@@ -270,6 +279,7 @@ def place_facts(place_qid):
         "description": _v(r, "placeDescription"),
         "wkt": wkt,
         "tgn": _v(r, "tgn"),
+        "geonames": _v(r, "geonames"),
         "type": _v(r, "typeLabel"),
     }
 
@@ -280,10 +290,12 @@ def group_facts(group_qid):
         return {}
     query = (
         """
-    SELECT ?groupLabel ?groupDescription ?inception ?ulan WHERE {
+    SELECT ?groupLabel ?groupDescription ?inception ?ulan ?viaf ?isni WHERE {
       BIND(wd:%s AS ?group)
       OPTIONAL { ?group wdt:P571 ?inception. }   # inception (date formed)
       OPTIONAL { ?group wdt:P245 ?ulan. }        # Getty ULAN ID
+      OPTIONAL { ?group wdt:P214 ?viaf. }        # VIAF authority id
+      OPTIONAL { ?group wdt:P213 ?isni. }        # ISNI
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
     LIMIT 1
@@ -306,7 +318,39 @@ def group_facts(group_qid):
         "description": _v(r, "groupDescription"),
         "inception": _v(r, "inception"),
         "ulan": _v(r, "ulan"),
+        "viaf": _v(r, "viaf"),
+        "isni": _v(r, "isni"),
     }
+
+
+def concept_facts(concept_qid):
+    """Scalar facts for a concept (movement / genre / technique): label,
+    description, and Getty AAT id (P1014) for the Linked Art `equivalent`."""
+    if not QID_RE.match(concept_qid):
+        return {}
+    query = (
+        """
+    SELECT ?cLabel ?cDescription ?aat WHERE {
+      BIND(wd:%s AS ?c)
+      OPTIONAL { ?c wdt:P1014 ?aat. }   # Getty AAT ID
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 1
+    """
+        % concept_qid
+    )
+    try:
+        rows = run_sparql(query, timeout=20)
+    except Exception as e:
+        print(f"concept_facts error: {e}")
+        return {}
+    if not rows:
+        return {}
+    r = rows[0]
+    name = _v(r, "cLabel")
+    if not name or QID_RE.match(name):
+        name = "Unknown concept"
+    return {"name": name, "description": _v(r, "cDescription"), "aat": _v(r, "aat")}
 
 
 def enrich_entities(qids):
