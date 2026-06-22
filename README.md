@@ -54,8 +54,14 @@ hard parts:
 - **Explore** — click any related work / artist / movement to load it; a date
   picker for any day; "🎲 Surprise me"; a Back stack.
 - **Gallery (dark) mode** — paintings on a museum wall, persisted across visits.
-- **Linked Art API** — every artwork is also a dereferenceable
-  [Linked Art](https://linked.art) / CIDOC-CRM JSON-LD record (`/object/<QID>`).
+- **Deep-zoom viewer** — click the painting for a full-resolution
+  [IIIF](https://iiif.io) + OpenSeadragon lightbox; every artwork also serves a
+  IIIF Presentation 3.0 manifest at `/iiif/<QID>/manifest.json`.
+- **Linked Art API** — every entity is a dereferenceable
+  [Linked Art](https://linked.art) / CIDOC-CRM JSON-LD record (object, person,
+  place, group, concept, set at `/object/<QID>` etc.) with authority links
+  (VIAF/Getty/ISNI), provenance events, content negotiation, HAL and CORS —
+  validated against the official JSON Schemas.
 - **Production-ready** — rate limiting, bounded caches, reverse-proxy awareness,
   a health check, and live, per-item attribution.
 

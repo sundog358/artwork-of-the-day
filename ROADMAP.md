@@ -40,7 +40,13 @@ The foundation is complete and live at **[metahistorybook.com](https://metahisto
   "Surprise me", Back stack
 - ✅ **Gallery (dark) mode**, accessibility (alt text, focus, ARIA), SEO
   (Open Graph + `schema.org/VisualArtwork`)
-- ✅ **Linked Art** / CIDOC-CRM JSON-LD records ([linked_art.py](linked_art.py))
+- ✅ **Linked Art** / CIDOC-CRM JSON-LD — 7 dereferenceable record types (object,
+  visual, person, place, group, **concept, set**), authority links
+  (VIAF/ULAN/TGN/ISNI/RKD/GeoNames), provenance & event activities, content
+  negotiation, HAL, and CORS — all validated against the official JSON Schemas
+  ([linked_art.py](linked_art.py))
+- ✅ **IIIF Presentation 3.0** manifest per artwork + an in-app deep-zoom viewer
+  ([iiif.py](iiif.py))
 - ✅ Production hardening — rate limiting, bounded caches, ProxyFix, health check
 - ✅ Tests + CI (ruff · format · mypy · pytest), licensing/attribution page
 
@@ -52,9 +58,9 @@ The engine is rich in *text*; these add the *visual* and *sensory* dimensions.
 Each is self-contained and screenshot-friendly.
 
 ### Look closely
-- 🔭 **Deep-zoom image viewer** — pan/zoom into brushwork (Commons serves the
-  full-resolution image; an OpenSeadragon-style lightbox or a CSS-transform
-  panner).
+- ✅ **Deep-zoom image viewer** — a IIIF Presentation 3.0 manifest per artwork
+  ([iiif.py](iiif.py)) feeds an OpenSeadragon lightbox: click the painting to
+  pan and zoom the full-resolution Commons image.
 - 💡 **Colour palette** extracted from the painting; a dominant-colour backdrop
   behind the image.
 

@@ -134,6 +134,58 @@
         border-radius: 50%;
         cursor: pointer;
       }
+      /* Deep-zoom lightbox (IIIF + OpenSeadragon) */
+      #lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+        background: rgba(8, 10, 14, 0.97);
+      }
+      #lightbox.open {
+        display: flex;
+      }
+      .lb-bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.65rem 1.1rem;
+        color: #e8eef5;
+        font-size: 0.95rem;
+      }
+      .lb-title {
+        font-weight: 600;
+      }
+      .lb-hint {
+        margin-left: auto;
+        opacity: 0.7;
+        font-size: 0.8rem;
+      }
+      .lb-close {
+        background: none;
+        border: none;
+        color: #e8eef5;
+        font-size: 1.9rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 0.3rem;
+      }
+      .lb-close:hover {
+        color: #fff;
+      }
+      #osd {
+        flex: 1;
+        width: 100%;
+      }
+      .lb-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #cdd6e0;
+        font-size: 0.95rem;
+      }
       .artwork-info {
         flex: 1;
         min-width: 0;
@@ -1198,7 +1250,7 @@
           </div>`;
 
         const imgC = document.querySelector(".img-container");
-        if (imgC) imgC.addEventListener("click", () => window.open(item.image, "_blank"));
+        if (imgC) imgC.addEventListener("click", () => openLightbox(item));
         const prev = document.querySelector(".nav-arrow.prev");
         const next = document.querySelector(".nav-arrow.next");
         if (prev)
@@ -1403,6 +1455,104 @@
         e.preventDefault();
         openExplore(link.getAttribute("data-open"), link.getAttribute("data-qid"), link.textContent);
       });
+
+      // --- Deep-zoom lightbox (IIIF manifest + OpenSeadragon) ----------------
+      const OSD_BASE = "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/";
+      let _osdViewer = null;
+
+      function loadOSD() {
+        return new Promise((resolve, reject) => {
+          if (window.OpenSeadragon) return resolve();
+          const s = document.createElement("script");
+          s.src = OSD_BASE + "openseadragon.min.js";
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("OpenSeadragon failed to load"));
+          document.head.appendChild(s);
+        });
+      }
+
+      function ensureLightbox() {
+        let lb = document.getElementById("lightbox");
+        if (lb) return lb;
+        lb = document.createElement("div");
+        lb.id = "lightbox";
+        lb.innerHTML = `
+          <div class="lb-bar">
+            <span class="lb-title"></span>
+            <span class="lb-hint">Scroll or pinch to zoom · drag to pan · Esc to close</span>
+            <button class="lb-close" aria-label="Close deep-zoom view">&times;</button>
+          </div>
+          <div id="osd"></div>
+          <div class="lb-loading">Loading high-resolution image…</div>`;
+        document.body.appendChild(lb);
+        lb.querySelector(".lb-close").addEventListener("click", closeLightbox);
+        lb.addEventListener("click", (e) => {
+          if (e.target === lb) closeLightbox();
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeLightbox();
+        });
+        return lb;
+      }
+
+      async function openLightbox(item) {
+        const lb = ensureLightbox();
+        lb.classList.add("open");
+        document.body.style.overflow = "hidden";
+        const titleEl = document.getElementById("aotd-title");
+        lb.querySelector(".lb-title").textContent = (titleEl && titleEl.textContent) || "";
+        const loading = lb.querySelector(".lb-loading");
+        loading.style.display = "";
+
+        // Prefer the full-resolution image from our own IIIF manifest; fall back
+        // to the displayed image if the manifest (or its Commons lookup) fails.
+        let imageUrl = item.image;
+        try {
+          const r = await fetch("/iiif/" + item.artwork_id + "/manifest.json");
+          if (r.ok) {
+            const man = await r.json();
+            const body =
+              man.items && man.items[0].items[0].items[0] && man.items[0].items[0].items[0].body;
+            if (body && body.id) imageUrl = body.id;
+          }
+        } catch (e) {
+          /* use the displayed image */
+        }
+
+        try {
+          await loadOSD();
+        } catch (e) {
+          closeLightbox();
+          window.open(imageUrl, "_blank"); // CDN blocked — degrade to a new tab
+          return;
+        }
+        if (_osdViewer) {
+          _osdViewer.destroy();
+          _osdViewer = null;
+        }
+        _osdViewer = OpenSeadragon({
+          id: "osd",
+          tileSources: { type: "image", url: imageUrl },
+          prefixUrl: OSD_BASE + "images/",
+          showNavigator: true,
+          navigatorPosition: "BOTTOM_RIGHT",
+          gestureSettingsMouse: { clickToZoom: false },
+        });
+        _osdViewer.addOnceHandler("open", () => {
+          loading.style.display = "none";
+        });
+      }
+
+      function closeLightbox() {
+        const lb = document.getElementById("lightbox");
+        if (!lb) return;
+        lb.classList.remove("open");
+        document.body.style.overflow = "";
+        if (_osdViewer) {
+          _osdViewer.destroy();
+          _osdViewer = null;
+        }
+      }
 
       // Wire the persistent explore toolbar (Back / Surprise / date / Today).
       function wireControls() {
