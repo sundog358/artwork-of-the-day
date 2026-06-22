@@ -49,8 +49,14 @@ python serve.py                    # honors the PORT env var, default 5000
 | `PORT` | `5000` | Port to listen on |
 | `FLASK_DEBUG` | `0` | `1`/`true` enables the dev server's debugger (never in prod) |
 | `AOTD_CONTACT` | repo URL | Contact string sent in the Wikidata `User-Agent` |
-| `OPENAI_API_KEY` (or `AOTD_OPENAI_API_KEY`) | _(unset)_ | Enables the opt-in AI article writer. Unset → deterministic Wikidata summary. Read from `.env`. |
-| `AOTD_ARTICLE_MODEL` | `gpt-4o-mini` | OpenAI model for articles (e.g. `gpt-4o`). |
+| `AOTD_LLM_BACKEND` | `openai` if a key is set, else off | Which backend writes AI articles: `ollama` (free, local) or `openai` (paid). With neither, the app serves the deterministic Wikidata summary. |
+| `AOTD_OLLAMA_MODEL` | `gemma4:latest` | Local Ollama model (needs Ollama running + the model pulled). |
+| `AOTD_OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint. |
+| `AOTD_OLLAMA_TIMEOUT` | `300` | Seconds to wait for local generation. |
+| `OPENAI_API_KEY` (or `AOTD_OPENAI_API_KEY`) | _(unset)_ | Used when `AOTD_LLM_BACKEND=openai`. Read from `.env`. |
+| `AOTD_ARTICLE_MODEL` | `gpt-4o-mini` | OpenAI model (when using the OpenAI backend). |
+
+See [.env.example](.env.example) for a ready-to-copy config.
 
 ## Deploy
 
@@ -65,6 +71,17 @@ on most Python hosts (Render, Railway, Fly.io, a VPS, etc.). General steps:
 Because the content changes only once a day, putting a CDN/cache in front of it
 (or relying on the built-in daily cache + `Cache-Control: max-age=3600`) keeps
 load on Wikidata minimal.
+
+### Self-contained Docker (no API cost)
+
+For a fully self-contained deployment — the web app, the Ollama server, and a
+local LLM all baked into **one image** with no external API and no per-token
+cost — see **[DOCKER.md](DOCKER.md)**:
+
+```bash
+docker build -t artwork-of-the-day .
+docker run --rm -p 5000:5000 artwork-of-the-day      # add --gpus all if available
+```
 
 ## Architecture
 

@@ -1,0 +1,26 @@
+# Convenience wrapper around the single self-contained image — still ONE
+# container. `docker compose up --build` builds and runs the whole app
+# (web + Ollama + baked-in model), no external API.
+services:
+  artwork-of-the-day:
+    build:
+      context: .
+      args:
+        # Model baked into the image. Override here or with --build-arg.
+        OLLAMA_MODEL: gemma4:latest
+    image: artwork-of-the-day
+    container_name: artwork-of-the-day
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+    # --- GPU acceleration (recommended) -----------------------------------
+    # Local LLM inference is much faster on a GPU. Needs the NVIDIA Container
+    # Toolkit on the host. Uncomment to enable:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

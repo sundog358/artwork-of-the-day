@@ -6,6 +6,7 @@ import random
 import re
 import os
 import threading
+from collections import OrderedDict
 
 
 def _load_dotenv(path=".env"):
@@ -43,6 +44,57 @@ QID_RE = re.compile(r'^Q\d+$')
 
 app = Flask(__name__, static_folder='static')
 
+# Trust the reverse proxy a managed host (Render/Cloud Run/Railway/nginx) puts in
+# front of us, so request.remote_addr is the real client IP (correct rate-limit
+# buckets) and request.host_url/scheme reflect the public https origin.
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# --- Rate limiting --------------------------------------------------------- #
+# The generate=1 path is the only expensive, money/CPU-spending endpoint, so it
+# gets a tight per-IP budget; everything else gets a generous default so normal
+# browsing is never throttled. In-memory storage suits our single-process
+# Waitress server; point AOTD_RATELIMIT_STORAGE at redis:// if you ever run more
+# than one process. Set AOTD_RATELIMIT_ENABLED=0 to disable entirely.
+from flask_limiter import Limiter  # noqa: E402
+from flask_limiter.util import get_remote_address  # noqa: E402
+
+_RL_ENABLED = os.environ.get("AOTD_RATELIMIT_ENABLED", "1").lower() not in ("0", "false", "no")
+_RL_DEFAULT = os.environ.get("AOTD_RATELIMIT_DEFAULT", "240 per hour;60 per minute")
+_RL_GENERATE = os.environ.get("AOTD_RATELIMIT_GENERATE", "10 per hour;3 per minute")
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=_RL_DEFAULT.split(";"),
+    storage_uri=os.environ.get("AOTD_RATELIMIT_STORAGE", "memory://"),
+    enabled=_RL_ENABLED,
+)
+
+
+@app.errorhandler(429)
+def _ratelimited(e):
+    return jsonify({
+        "status": "error",
+        "message": "Too many requests — please slow down and try again shortly.",
+    }), 429
+
+
+# --- Bounded in-process caches --------------------------------------------- #
+# These caches are unbounded by nature (any valid QID combination is a new key),
+# so without a cap a crawler or abuser hitting many distinct ids would grow
+# memory until the process is OOM-killed. Cap each and evict the oldest entry
+# (FIFO) once full. Caller must hold _cache_lock.
+_MAX_CACHE = int(os.environ.get("AOTD_CACHE_MAX", "512"))
+
+
+def _cache_set(cache, key, value):
+    """Insert into a bounded process cache, evicting the oldest entry when full.
+    Relies on dict/OrderedDict insertion order. Caller holds _cache_lock."""
+    if key not in cache and len(cache) >= _MAX_CACHE:
+        cache.popitem(last=False)
+    cache[key] = value
+
+
 WDQS_ENDPOINT = 'https://query.wikidata.org/sparql'
 # Wikimedia asks for a descriptive User-Agent with a real contact. Override the
 # contact via the AOTD_CONTACT env var when deploying.
@@ -60,10 +112,10 @@ MAX_OFFSET = 300000
 # and the site keeps working even if Wikidata is briefly slow/unavailable after
 # the first successful fetch of the day.
 _cache_lock = threading.Lock()
-_day_cache = {"date": None, "payload": None}
-_details_cache = {}
-_article_cache = {}
-_la_cache = {}  # Linked Art records: (kind, qid) -> record dict
+_day_cache = {"date": None, "payload": None}  # single entry; no cap needed
+_details_cache = OrderedDict()
+_article_cache = OrderedDict()
+_la_cache = OrderedDict()  # Linked Art records: (kind, qid) -> record dict
 
 
 def run_sparql(query, timeout=45):
@@ -229,7 +281,12 @@ def artwork_of_the_day():
             "today": date_label,
             "count": len(items),
             "items": items,
-            "aiEnabled": bool(article_writer.openai_key()),
+            "aiEnabled": bool(article_writer.llm_available()),
+            # When false (default), the page shows the free Wikidata summary and
+            # writes the AI article only when the reader clicks the button — so a
+            # public deploy never spends tokens/CPU on bots or idle views. Set
+            # AOTD_AUTO_GENERATE=1 to write every article automatically.
+            "autoGenerate": os.environ.get("AOTD_AUTO_GENERATE", "").lower() in ("1", "true", "yes"),
         }
         with _cache_lock:
             _day_cache["date"] = date_key
@@ -282,7 +339,7 @@ def artwork_details():
             "artist": artist,
         }
         with _cache_lock:
-            _details_cache[cache_key] = payload
+            _cache_set(_details_cache, cache_key, payload)
         return jsonify(payload)
     except requests.exceptions.Timeout:
         return jsonify({
@@ -295,6 +352,12 @@ def artwork_details():
 
 
 @app.route('/artwork-article', methods=['GET'])
+@limiter.limit(
+    _RL_GENERATE,  # one string; Flask-Limiter parses the ";"-separated limits
+    # This tight budget applies ONLY to the expensive AI path; the plain Wikidata
+    # summary (generate omitted) is left to the generous default limit.
+    exempt_when=lambda: request.args.get("generate") != "1",
+)
 def artwork_article():
     """Return a short, grounded article about one artwork + its artist.
 
@@ -331,7 +394,7 @@ def artwork_article():
         article = article_writer.build(artwork, artist, generate=generate)
         payload = {"status": "success", "article": article}
         with _cache_lock:
-            _article_cache[cache_key] = payload
+            _cache_set(_article_cache, cache_key, payload)
         return jsonify(payload)
     except requests.exceptions.Timeout:
         return jsonify({
@@ -456,7 +519,7 @@ def linked_art_object(qid):
             artwork_qid=qid, artist_qid=artist_qid, description=desc,
         )
         with _cache_lock:
-            _la_cache[("object", qid)] = record
+            _cache_set(_la_cache, ("object", qid), record)
         return _serve_la(record, self_uri)
     except requests.exceptions.Timeout:
         return _ld_response({"error": "Wikidata timeout"}, 504)
@@ -487,7 +550,7 @@ def linked_art_visual(qid):
             entity_types=entity_types,
         )
         with _cache_lock:
-            _la_cache[("visual", qid)] = record
+            _cache_set(_la_cache, ("visual", qid), record)
         return _serve_la(record, self_uri)
     except requests.exceptions.Timeout:
         return _ld_response({"error": "Wikidata timeout"}, 504)
@@ -514,7 +577,7 @@ def linked_art_person(qid):
             artist, base=base, person_uri=f"{base}/person/{qid}", artist_qid=qid,
         )
         with _cache_lock:
-            _la_cache[("person", qid)] = record
+            _cache_set(_la_cache, ("person", qid), record)
         return _serve_la(record, self_uri)
     except requests.exceptions.Timeout:
         return _ld_response({"error": "Wikidata timeout"}, 504)
@@ -539,7 +602,7 @@ def linked_art_place(qid):
         base = request.host_url.rstrip("/")
         record = linked_art.place_record(facts, place_uri=f"{base}/place/{qid}", place_qid=qid)
         with _cache_lock:
-            _la_cache[("place", qid)] = record
+            _cache_set(_la_cache, ("place", qid), record)
         return _serve_la(record, self_uri)
     except requests.exceptions.Timeout:
         return _ld_response({"error": "Wikidata timeout"}, 504)
@@ -564,7 +627,7 @@ def linked_art_group(qid):
         base = request.host_url.rstrip("/")
         record = linked_art.group_record(facts, group_uri=f"{base}/group/{qid}", group_qid=qid)
         with _cache_lock:
-            _la_cache[("group", qid)] = record
+            _cache_set(_la_cache, ("group", qid), record)
         return _serve_la(record, self_uri)
     except requests.exceptions.Timeout:
         return _ld_response({"error": "Wikidata timeout"}, 504)

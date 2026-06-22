@@ -2,9 +2,11 @@
 
 Pipeline (run once per artwork, then cached by the caller):
   1. Build a fact packet from the artwork + artist detail dicts.
-  2. If an OpenAI API key is configured, ask the model to write a short article
-     grounded ONLY in those facts, citing the fact id(s) behind each sentence
-     (structured output, so we get schema-valid JSON back).
+  2. If a generation backend is configured (hosted OpenAI, or a FREE local model
+     via Ollama — see _backend / AOTD_LLM_BACKEND), ask it to write a short
+     article grounded ONLY in those facts, citing the fact id(s) behind each
+     sentence (structured output, so we get schema-valid JSON back). Both
+     backends speak the OpenAI SDK, so the pipeline below is identical for each.
   3. Verify every sentence: it must cite a real fact, its numbers must appear in
      the cited facts (numeric_date_facts), and its wording must overlap the cited
      facts (support_span). Any blocking failure fails the whole article.
@@ -36,6 +38,37 @@ def openai_key():
 def _model():
     # Defaults to gpt-4o-mini (cheap, supports structured outputs); override via env.
     return os.environ.get("AOTD_ARTICLE_MODEL", "gpt-4o-mini")
+
+
+# --- LLM backend selection ------------------------------------------------- #
+# Two backends, both spoken through the OpenAI SDK (Ollama exposes an
+# OpenAI-compatible endpoint), so the whole generation + verification pipeline is
+# identical regardless of which one runs:
+#   - "openai": the hosted API (costs money, needs a key)
+#   - "ollama": a LOCAL model via Ollama (free, no key) — e.g. gemma4:latest
+# Pick with AOTD_LLM_BACKEND; if unset, default to openai when a key exists.
+def _backend():
+    b = os.environ.get("AOTD_LLM_BACKEND", "").strip().lower()
+    if b:
+        return b
+    return "openai" if openai_key() else ""
+
+
+def _ollama_host():
+    return os.environ.get("AOTD_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+
+def _ollama_model():
+    return os.environ.get("AOTD_OLLAMA_MODEL", "gemma4:latest")
+
+
+def llm_available():
+    """Whether a usable text-generation backend is configured. Ollama is assumed
+    reachable (a dead server just falls back to the deterministic summary)."""
+    b = _backend()
+    if b == "openai":
+        return bool(openai_key())
+    return b == "ollama"
 
 # Structured-output schema: a blog post = title + sections, each with a heading
 # and paragraphs of sentences, every sentence tagged with the fact ids it draws
@@ -198,15 +231,16 @@ def _enrichment_facts(artwork, artist):
 def build(artwork, artist, generate=False):
     """Return the article payload (always succeeds — falls back on any problem).
 
-    OpenAI is called ONLY when generate=True and a key is configured. The default
-    is the deterministic Wikidata fact summary — no model call — so normal
-    browsing costs nothing and leans entirely on Wikidata/SPARQL data.
+    The LLM is called ONLY when generate=True and a backend is configured
+    (hosted OpenAI, or a free local Ollama model — see _backend). The default is
+    the deterministic Wikidata fact summary — no model call — so normal browsing
+    costs nothing and leans entirely on Wikidata/SPARQL data.
     """
     title = _clean(artwork.get("title")) or "This artwork"
     # Proper-noun entities (label → QID) for linking mentions in the prose.
     entities = artwork.get("_link_entities", [])
 
-    if generate and openai_key():
+    if generate and llm_available():
         # Second hop only when we're actually generating: enrich the named
         # entities with one batched SPARQL query so the prose has real
         # background to ground on (who Lisa del Giocondo was, what Florence is…).
@@ -219,7 +253,7 @@ def build(artwork, artist, generate=False):
     else:
         facts = build_fact_packet(artwork, artist)
 
-    if generate and openai_key() and facts:
+    if generate and llm_available() and facts:
         try:
             article = _generate(facts, title)
             verdict = _verify(article, facts)
@@ -242,11 +276,24 @@ def build(artwork, artist, generate=False):
     return payload
 
 
-def _generate(facts, title):
-    """Call OpenAI for a grounded, sentence-cited article (structured output)."""
+def _llm_client():
+    """Return (client, model, backend). Both backends use the OpenAI SDK — Ollama
+    just points it at its local OpenAI-compatible endpoint with a generous
+    timeout (a local model's first call loads ~GBs into memory)."""
     from openai import OpenAI  # lazy import so the app runs without the package
 
-    client = OpenAI(api_key=openai_key())
+    backend = _backend()
+    if backend == "ollama":
+        timeout = float(os.environ.get("AOTD_OLLAMA_TIMEOUT", "300"))
+        client = OpenAI(base_url=f"{_ollama_host()}/v1", api_key="ollama", timeout=timeout)
+        return client, _ollama_model(), "ollama"
+    return OpenAI(api_key=openai_key()), _model(), "openai"
+
+
+def _generate(facts, title):
+    """Call the configured LLM for a grounded, sentence-cited article (structured
+    output). Works the same for OpenAI and a local Ollama model."""
+    client, model, backend = _llm_client()
     fact_lines = "\n".join(f"{f['id']}: {f['label']} — {f['text']}" for f in facts)
 
     system = (
@@ -269,22 +316,19 @@ def _generate(facts, title):
         "support. Give the post an engaging title."
     )
 
+    json_schema = {"name": "grounded_article", "schema": ARTICLE_SCHEMA}
+    if backend == "openai":
+        json_schema["strict"] = True  # OpenAI strict mode; Ollama uses the schema as-is
+
     resp = client.chat.completions.create(
-        model=_model(),
+        model=model,
         max_tokens=4000,
         temperature=0.7,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "grounded_article",
-                "strict": True,
-                "schema": ARTICLE_SCHEMA,
-            },
-        },
+        response_format={"type": "json_schema", "json_schema": json_schema},
     )
     content = resp.choices[0].message.content
     if not content:

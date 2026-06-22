@@ -1,0 +1,24 @@
+# Render blueprint for the public, OpenAI-backed deploy.
+# 1. Push this repo to GitHub.
+# 2. In Render: New > Blueprint, point at the repo (it reads this file).
+# 3. Set the OPENAI_API_KEY secret when prompted (sync: false = not in git).
+# Render provides HTTPS, $PORT, and a health check automatically.
+services:
+  - type: web
+    name: artwork-of-the-day
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: starter            # ~$7/mo, always-on. Use "free" to try (sleeps when idle).
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: AOTD_LLM_BACKEND
+        value: openai
+      - key: AOTD_ARTICLE_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_API_KEY
+        sync: false          # set in the Render dashboard; never commit the key
+      - key: AOTD_CONTACT
+        value: https://github.com/jchirum/artwork-of-the-day
+      # Generation stays click-gated by default (AOTD_AUTO_GENERATE unset).
+      # Rate limits and cache cap use sensible defaults; override here if needed.

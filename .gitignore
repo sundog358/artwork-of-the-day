@@ -19,6 +19,10 @@ env/
 .env.*
 !.env.example
 
+# Downloaded reference repos (kept locally for reference, not part of this project)
+fastapiollamadocker/
+fastapidocker/
+
 # OS
 .DS_Store
 Thumbs.db

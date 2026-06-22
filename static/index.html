@@ -461,7 +461,8 @@
         index: 0,
         cache: {}, // artwork_id -> { artwork, artist }
         articleCache: {}, // "<artwork_id>:sum|gen" -> article payload
-        aiEnabled: false, // is an OpenAI key configured server-side?
+        aiEnabled: false, // is a generation backend configured server-side?
+        autoGenerate: false, // write the AI article on view, or wait for a click?
       };
 
       function esc(s) {
@@ -534,6 +535,7 @@
           state.cache = {};
           state.articleCache = {};
           state.aiEnabled = !!data.aiEnabled;
+          state.autoGenerate = !!data.autoGenerate;
 
           if (!state.items.length) throw new Error("No artwork found for today");
 
@@ -581,7 +583,11 @@
         // Auto-write the full article when a key is configured; otherwise show the
         // Wikidata fact summary. Either way the result is cached per artwork, so
         // each piece is written at most once.
-        const useAI = state.aiEnabled;
+        // Default: show the free Wikidata summary and let the reader opt into the
+        // AI article via the button (renderArticle shows it). Auto-write only when
+        // the server opts in (AOTD_AUTO_GENERATE), so a public site never spends
+        // tokens on bots or views nobody asked to expand.
+        const useAI = state.aiEnabled && state.autoGenerate;
         el.innerHTML =
           `<div class="mini-loading"><div class="loading-spinner small"></div>` +
           (useAI ? "Writing the article…" : "Summarizing from Wikidata…") +

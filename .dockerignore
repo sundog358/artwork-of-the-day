@@ -1,0 +1,38 @@
+# Never bake secrets into the image — the container uses local Ollama, no key.
+.env
+.env.*
+!.env.example
+
+# VCS / tooling
+.git
+.gitattributes
+.gitignore
+.github/
+.claude/
+.vscode/
+.idea/
+
+# Python caches / local venvs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Downloaded reference repos (not part of the app)
+fastapiollamadocker/
+fastapidocker/
+reference/
+
+# Dev-only validator + vendored schemas (not used at runtime)
+validate_linked_art.py
+requirements-dev.txt
+linked_art_schema/
+
+# Docker build context itself
+Dockerfile
+Dockerfile.web
+.dockerignore
+docker-compose.yml
+docker-entrypoint.sh

@@ -398,11 +398,20 @@ comes from CC0 Wikidata — one extra dimension of data, not extra model calls.
 
 The dossier (now ~24 facts) drives [article_writer.py](article_writer.py):
 - **Generated** mode → a 3-5 **section** blog post (title + headings + paragraphs),
-  via OpenAI strict `json_schema`, `max_tokens` 4000.
+  via a structured `json_schema`, `max_tokens` 4000.
+- **Pluggable backend** (`AOTD_LLM_BACKEND`): the **same** prompt + schema +
+  verifier run against either the hosted **OpenAI** API (paid) or a **free local
+  model via Ollama** (e.g. `gemma4:latest`). Ollama speaks the OpenAI SDK at
+  `http://localhost:11434/v1`, so only the client + model differ — set
+  `AOTD_LLM_BACKEND=ollama` to eliminate API cost. Local generation is slower
+  (cold model load ~minutes, warm ~30–60s) but cached per day. Either way, with
+  no backend configured the app serves the deterministic summary for free.
 - **Verification** is per sentence across sections; numbers are checked against the
   **whole dossier** (every fact is real Wikidata data — a number is only
   "fabricated" if it's nowhere in the dossier), avoiding false rejects when the
   model combines facts in one sentence. Cite-required + support-overlap unchanged.
+  This is what makes a smaller local model safe to use — it's constrained, then
+  checked, and any ungrounded sentence is dropped.
 - **Fallback** → a deterministic 2-section summary ("The work" / "The artist").
 - Panel gains rows for teachers/students and chips for contemporaries.
 
