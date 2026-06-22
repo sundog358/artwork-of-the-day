@@ -60,7 +60,10 @@ from flask_limiter import Limiter  # noqa: E402
 from flask_limiter.util import get_remote_address  # noqa: E402
 
 _RL_ENABLED = os.environ.get("AOTD_RATELIMIT_ENABLED", "1").lower() not in ("0", "false", "no")
-_RL_DEFAULT = os.environ.get("AOTD_RATELIMIT_DEFAULT", "240 per hour;60 per minute")
+# Browsing one item fans out into several requests (gallery + per-item details +
+# summary + prefetch), so the default has to be roomy or a normal session 429s
+# itself. The health check (/healthz) and home page (/) are exempted outright.
+_RL_DEFAULT = os.environ.get("AOTD_RATELIMIT_DEFAULT", "1200 per hour;120 per minute")
 _RL_GENERATE = os.environ.get("AOTD_RATELIMIT_GENERATE", "10 per hour;3 per minute")
 limiter = Limiter(
     get_remote_address,
@@ -223,8 +226,16 @@ def gather_details(artwork_id, artist_id):
 
 
 @app.route('/')
+@limiter.exempt  # the home page is a health-check target + every visit's first hit; never throttle it
 def index():
     return app.send_static_file('index.html')
+
+
+@app.route('/healthz')
+@limiter.exempt  # platform health checks poll this frequently; must never be rate limited
+def healthz():
+    """Lightweight liveness probe for Render/other hosts (no Wikidata, no model)."""
+    return jsonify({"status": "ok"}), 200
 
 
 # Most artworks to expose in the day's gallery.

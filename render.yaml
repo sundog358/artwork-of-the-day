@@ -9,7 +9,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.web
     plan: starter            # ~$7/mo, always-on. Use "free" to try (sleeps when idle).
-    healthCheckPath: /
+    healthCheckPath: /healthz   # lightweight, rate-limit-exempt liveness probe
     autoDeploy: true
     envVars:
       - key: AOTD_LLM_BACKEND
