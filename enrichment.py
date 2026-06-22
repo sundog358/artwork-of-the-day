@@ -32,6 +32,24 @@ def _a_or_an(word):
     return "an" if word[:1].lower() in "aeiou" else "a"
 
 
+def _phrase_card(card):
+    """Narrate one expanded entity card as 'Label (description, years)'. The
+    property->phrase building block the layers share."""
+    label = (card.get("label") or "").strip()
+    if not label:
+        return ""
+    desc = (card.get("description") or "").strip()
+    by = (card.get("birth") or card.get("inception") or "")[:4]
+    dy = (card.get("death") or "")[:4]
+    years = ""
+    if by.isdigit() and by not in desc:
+        years = f"{by}–{dy}" if dy.isdigit() else f"b. {by}"
+    detail = desc or (card.get("type") or "").strip()
+    if detail and detail.lower() not in label.lower():
+        return f"{label} ({detail}{', ' + years if years else ''})"
+    return f"{label}{' (' + years + ')' if years else ''}"
+
+
 def _and_list(labels):
     labels = [l for l in labels if l]
     if not labels:
@@ -116,28 +134,77 @@ def build(artwork_id, artist_id, artwork, artist):
         sections.append({"heading": f"About {name}", "paragraphs": [art["extract"]]})
         add_source(f"Wikipedia: {art['title']}", art["url"])
 
-    # --- 2. Other works by the artist (+ documented career span) ---------- #
+    # --- 1b. The subjects in depth (depicted entities, expanded) ---------- #
+    # Generic engine: expand every named depicted subject into a card and narrate
+    # it — turns "depicts X, Y" into "X (a 1773 frigate), Y (an 18th-c warship)".
+    depicts = artwork.get("depicts") or []
+    _title = (artwork.get("title") or "").lower()
+
+    def _real_subject(d):
+        label = d.get("label") or ""
+        low = label.lower()
+        if not d.get("qid") or not any(c.isupper() for c in label):
+            return False  # named entities only (skips sky, figure, armrest…)
+        # Skip Wikidata placeholder items like "person depicted in <painting>".
+        if "depicted in" in low or "depicted on" in low or (_title and _title in low):
+            return False
+        return True
+
+    depict_ids = [d["qid"] for d in depicts if _real_subject(d)]
+    if depict_ids:
+        cards = S.expand_entities(depict_ids[:8])
+        phrases = [_phrase_card(cards[q]) for q in depict_ids if q in cards]
+        phrases = [p for p in phrases if p]
+        if phrases:
+            sections.append({
+                "heading": "A closer look at the subjects",
+                "paragraphs": ["The painting brings together " + _and_list(phrases) + "."],
+            })
+
+    # --- 2. Other works by the artist (+ documented output) --------------- #
     works = S.artist_works(artist_id, exclude_qid=artwork_id, limit=8)
     if works:
         phrases = [f"{w['label']} ({w['year']})" if w["year"] else w["label"] for w in works[:6]]
         paras = [f"Other paintings by {name} include " + _and_list(phrases) + "."]
-        years = sorted(int(w["year"]) for w in works if w.get("year", "").isdigit())
-        if len(years) >= 2 and years[0] != years[-1]:
-            paras.append(f"Their documented paintings on Wikidata span {years[0]}–{years[-1]}.")
+        stats = S.artist_work_stats(artist_id)
+        try:
+            cnt = int(stats.get("count") or 0)
+        except ValueError:
+            cnt = 0
+        first, last = stats.get("first", ""), stats.get("last", "")
+        if cnt >= 3 and first and last and first != last:
+            paras.append(f"In all, {name} has {cnt} documented paintings on Wikidata, "
+                         f"spanning {first}–{last}.")
         sections.append({"heading": "Other works by the artist", "paragraphs": paras})
         for w in works[:6]:
             entities.append({"label": w["label"], "qid": w["qid"], "open": "artwork"})
 
-    # --- 2b. Collections that hold the artist's work ---------------------- #
+    # --- 2b. Collections that hold the artist's work (+ comparative) ------ #
     collections = S.artist_collections(artist_id, limit=8)
     if collections:
-        sections.append({
-            "heading": "Where the artist's work is held",
-            "paragraphs": [
-                f"Beyond this piece, {name}'s paintings are held in collections including "
-                + _and_list(collections) + "."
-            ],
-        })
+        labels = [c["label"] for c in collections]
+        held = [f"Beyond this piece, {name}'s paintings are held in collections including "
+                + _and_list(labels) + "."]
+        top = collections[0]
+        if top["n"] >= 2:
+            held.append(f"Their work is most concentrated at {top['label']}, "
+                        f"which holds {top['n']} of their paintings.")
+        sections.append({"heading": "Where the artist's work is held", "paragraphs": held})
+
+    # --- 2c. Genre, movement & training tradition ------------------------- #
+    trad = S.artist_traditions(artist_id)
+    tradition = []
+    for g in trad["genres"][:2]:
+        if g.get("description"):
+            tradition.append(f"{name} worked in {g['label']} — {g['description']}.")
+    for m in trad["movements"][:2]:
+        d = f" — {m['description']}" if m.get("description") else ""
+        tradition.append(f"The work belongs to the {m['label']} movement{d}.")
+    for ed in trad["education"][:2]:
+        if ed.get("description"):
+            tradition.append(f"{name} trained at {ed['label']}, {_a_or_an(ed['description'])} {ed['description']}.")
+    if tradition:
+        sections.append({"heading": "Genre and tradition", "paragraphs": tradition[:4]})
 
     # --- 3. Richer artwork facts ------------------------------------------ #
     ctx = S.artwork_context(artwork_id)

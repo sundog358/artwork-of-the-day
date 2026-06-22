@@ -535,12 +535,12 @@ def artwork_context(artwork_id):
 
 def artist_collections(artist_id, limit=10):
     """Distinct museums/collections that hold this artist's paintings (P195
-    across their P170 works), most-held first. Returns a list of labels —
-    institutional context ('held in collections including the Met, the MFA…')."""
+    across their P170 works), most-held first. Returns [{label, n}] — institutional
+    context ('held at the Met, the MFA…') and the comparative 'most-collected at X'."""
     if not QID_RE.match(artist_id):
         return []
     query = """
-    SELECT ?cLabel (COUNT(?w) AS ?n) WHERE {
+    SELECT ?cLabel (COUNT(DISTINCT ?w) AS ?n) WHERE {
       ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P195 ?c.
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
     }
@@ -558,7 +558,11 @@ def artist_collections(artist_id, limit=10):
         label = _v(r, "cLabel")
         if label and not QID_RE.match(label) and label not in seen:
             seen.add(label)
-            out.append(label)
+            try:
+                n = int(_v(r, "n"))
+            except ValueError:
+                n = 0
+            out.append({"label": label, "n": n})
         if len(out) >= limit:
             break
     return out
@@ -594,6 +598,36 @@ def artist_identifiers(artist_id):
     return out
 
 
+def artist_traditions(artist_id):
+    """The traditions an artist belongs to: genres (P136), movements (P135), and
+    schools/academies they trained at (P69) — each with a Wikidata description so
+    the prose can explain what the genre/movement/school *is*. Returns
+    {genres, movements, education} as [{qid, label, description}] lists."""
+    out = {"genres": [], "movements": [], "education": []}
+    if not QID_RE.match(artist_id):
+        return out
+    query = """
+    SELECT ?rel ?v ?vLabel ?vDescription WHERE {
+      VALUES (?rel ?p) { ("genres" wdt:P136) ("movements" wdt:P135) ("education" wdt:P69) }
+      wd:%s ?p ?v.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 40
+    """ % artist_id
+    try:
+        rows = run_sparql(query, timeout=25)
+    except Exception as e:
+        print(f"artist_traditions error: {e}")
+        return out
+    seen = set()
+    for r in rows:
+        rel, q, label = _v(r, "rel"), qid(_v(r, "v")), _v(r, "vLabel")
+        if rel in out and q and label and not QID_RE.match(label) and (rel, q) not in seen:
+            seen.add((rel, q))
+            out[rel].append({"qid": q, "label": label, "description": _v(r, "vDescription")})
+    return out
+
+
 def artist_relations(artist_id):
     """People around the artist: spouse (P26), students (P802), and artists who
     cite them as an influence (reverse P737). Returns {spouse, students,
@@ -619,6 +653,85 @@ def artist_relations(artist_id):
         rel, label = _v(r, "rel"), _v(r, "vLabel")
         if rel in out and label and not QID_RE.match(label) and label not in out[rel]:
             out[rel].append(label)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Enrichment engine: generic entity-expander (one batched "tell me about these")#
+# --------------------------------------------------------------------------- #
+def expand_entities(qids):
+    """The reusable building block: given any set of QIDs, return a normalised
+    'card' for each — label, description, a type (instance-of), life/inception
+    dates, and country/place — in ONE batched query. Layers narrate these cards
+    instead of each writing its own query.
+
+    Returns {qid: {label, description, type, birth, death, inception, country,
+    admin}}. Multi-valued props are SAMPLEd to one value to avoid row blow-up.
+    """
+    valid = [q for q in dict.fromkeys(qids) if QID_RE.match(q)]
+    out = {}
+    if not valid:
+        return out
+    values = " ".join(f"wd:{q}" for q in valid)
+    query = """
+    SELECT ?e ?eLabel ?eDescription (SAMPLE(?type) AS ?t) (SAMPLE(?b) AS ?birth)
+           (SAMPLE(?d) AS ?death) (SAMPLE(?inc) AS ?inception)
+           (SAMPLE(?ctry) AS ?country) (SAMPLE(?adm) AS ?admin) WHERE {
+      VALUES ?e { %s }
+      OPTIONAL { ?e wdt:P31 ?typeItem. ?typeItem rdfs:label ?type. FILTER(LANG(?type) = "en") }
+      OPTIONAL { ?e wdt:P569 ?b. }
+      OPTIONAL { ?e wdt:P570 ?d. }
+      OPTIONAL { ?e wdt:P571 ?inc. }
+      OPTIONAL { ?e wdt:P17 ?ctryItem. ?ctryItem rdfs:label ?ctry. FILTER(LANG(?ctry) = "en") }
+      OPTIONAL { ?e wdt:P131 ?admItem. ?admItem rdfs:label ?adm. FILTER(LANG(?adm) = "en") }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?e ?eLabel ?eDescription
+    """ % values
+    try:
+        rows = run_sparql(query, timeout=35)
+    except Exception as e:
+        print(f"expand_entities error: {e}")
+        return out
+    for r in rows:
+        q = qid(_v(r, "e"))
+        label = _v(r, "eLabel")
+        if not q or (label and QID_RE.match(label)):
+            continue
+        out[q] = {
+            "label": label,
+            "description": _v(r, "eDescription"),
+            "type": _v(r, "t"),
+            "birth": _v(r, "birth"),
+            "death": _v(r, "death"),
+            "inception": _v(r, "inception"),
+            "country": _v(r, "country"),
+            "admin": _v(r, "admin"),
+        }
+    return out
+
+
+def artist_work_stats(artist_id):
+    """Aggregate over the artist's paintings: how many on Wikidata and the year
+    span. Powers comparative sentences ('N works, 1902–1923')."""
+    out = {"count": 0, "first": "", "last": ""}
+    if not QID_RE.match(artist_id):
+        return out
+    query = """
+    SELECT (COUNT(DISTINCT ?w) AS ?n) (MIN(?y) AS ?first) (MAX(?y) AS ?last) WHERE {
+      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213.
+      OPTIONAL { ?w wdt:P571 ?date. BIND(YEAR(?date) AS ?y) }
+    }
+    """ % artist_id
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"artist_work_stats error: {e}")
+        return out
+    if rows:
+        r = rows[0]
+        out["count"] = _v(r, "n")
+        out["first"], out["last"] = _v(r, "first"), _v(r, "last")
     return out
 
 
