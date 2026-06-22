@@ -25,6 +25,7 @@ import requests
 
 import sparql_library as S
 import wikidata_facts as WF
+import wikibase_rest as WR
 
 
 def _gather(tasks, workers=5):
@@ -50,6 +51,15 @@ _WIKI_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary/"
 
 def _a_or_an(word):
     return "an" if word[:1].lower() in "aeiou" else "a"
+
+
+def _date_phrase(label, start, end):
+    """'theft (1911–1913)' / 'award (1903)' / 'event' — from a (label, start, end)."""
+    if start and end and end != start:
+        return f"{label} ({start}–{end})"
+    if start:
+        return f"{label} ({start})"
+    return label
 
 
 def _phrase_card(card):
@@ -207,8 +217,9 @@ def build(artwork_id, artist_id, artwork, artist):
         "awk_wiki": lambda: wikipedia_summary(S.wikipedia_sitelink(artwork_id)),
         "art_wiki": lambda: wikipedia_summary(_wiki_title(artist.get("wikipedia"))),
         "ctx_wiki": (lambda: _context_wikipedia(context_qids)) if context_qids else (lambda: []),
-        "events_dated": lambda: S.dated_values(artwork_id, "P793"),
-        "awards_dated": lambda: S.dated_values(artist_id, "P166"),
+        # Dated facts come from the Wikibase REST API (qualifier spans, off-WDQS).
+        "events_dated": lambda: WR.dated_facts(artwork_id, "P793"),
+        "awards_dated": lambda: WR.dated_facts(artist_id, "P166"),
         "same_collection": (lambda: S.notable_artworks_by([museum_qid], "P195", exclude=artwork_id, limit=5)) if museum_qid else (lambda: []),
         "same_movement": (lambda: S.notable_artworks_by(mv_qids, "P135", exclude=artwork_id, limit=5)) if mv_qids else (lambda: []),
         "depict_cards": (lambda: S.expand_entities(depict_ids)) if depict_ids else (lambda: {}),
@@ -265,7 +276,7 @@ def build(artwork_id, artist_id, artwork, artist):
     work_facts = WF.narrate(all_stmts.get(artwork_id, []), skip={"P793"}, limit=8)
     ev = g("events_dated", [])
     if ev:
-        parts = [f"{lbl} ({yr})" if yr else lbl for lbl, yr in ev]
+        parts = [_date_phrase(lbl, start, end) for lbl, start, end in ev]
         work_facts.append("It has witnessed " + _and_list(parts) + ".")
     if work_facts:
         sections.append({"heading": "The work in detail", "paragraphs": work_facts})
@@ -387,7 +398,7 @@ def build(artwork_id, artist_id, artwork, artist):
     more_artist = WF.narrate(all_stmts.get(artist_id, []), skip=artist_skip, limit=6)
     aw_dated = g("awards_dated", [])
     if aw_dated:
-        parts = [f"{lbl} ({yr})" if yr else lbl for lbl, yr in aw_dated[:5]]
+        parts = [_date_phrase(lbl, start, end) for lbl, start, end in aw_dated[:5]]
         more_artist = ["Honours include " + _and_list(parts) + "."] + more_artist
     if more_artist:
         sections.append({"heading": "More about the artist", "paragraphs": more_artist})

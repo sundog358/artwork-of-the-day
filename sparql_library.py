@@ -887,38 +887,9 @@ def _collect_works(query, limit=6):
     return out
 
 
-def dated_values(qid_, pid, limit=8):
-    """Statement values with their point-in-time (P585) / start-time (P580)
-    qualifier — [(label, year)] sorted by year. Powers dated narration like
-    'stolen 1911, recovered 1913' and 'awarded X (1903)'."""
-    if not QID_RE.match(qid_):
-        return []
-    query = """
-    SELECT ?vLabel ?date WHERE {
-      wd:%s p:%s ?st.
-      ?st ps:%s ?v.
-      OPTIONAL { ?st pq:P585 ?d1. }
-      OPTIONAL { ?st pq:P580 ?d2. }
-      BIND(COALESCE(?d1, ?d2) AS ?date)
-      ?v rdfs:label ?vLabel. FILTER(LANG(?vLabel) = "en")
-    }
-    LIMIT 60
-    """ % (qid_, pid, pid)
-    try:
-        rows = run_sparql(query, timeout=30)
-    except Exception as e:
-        print(f"dated_values error: {e}")
-        return []
-    out, seen = [], set()
-    for r in rows:
-        label = _v(r, "vLabel")
-        year = _v(r, "date")[:4]
-        if label and not QID_RE.match(label) and label not in seen:
-            seen.add(label)
-            out.append((label, year if year.isdigit() else ""))
-    # dated entries first (by year), then undated
-    out.sort(key=lambda lv: (lv[1] == "", lv[1]))
-    return out[:limit]
+# NB: dated-statement reads (events/awards with qualifier spans) moved to the
+# Wikibase REST API — see wikibase_rest.py — to capture end-times ("recovered
+# 1913") and to take that load off the SPARQL endpoint.
 
 
 # --------------------------------------------------------------------------- #
