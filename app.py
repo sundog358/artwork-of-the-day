@@ -51,11 +51,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # --- Rate limiting --------------------------------------------------------- #
-# The generate=1 path is the only expensive, money/CPU-spending endpoint, so it
-# gets a tight per-IP budget; everything else gets a generous default so normal
-# browsing is never throttled. In-memory storage suits our single-process
-# Waitress server; point AOTD_RATELIMIT_STORAGE at redis:// if you ever run more
-# than one process. Set AOTD_RATELIMIT_ENABLED=0 to disable entirely.
+# A generous per-IP default protects the Wikidata-hitting endpoints from abuse
+# without throttling normal browsing (one item view fans out into several
+# requests). The home page (/) and health check (/healthz) are exempt. In-memory
+# storage suits our single-process Waitress server; point AOTD_RATELIMIT_STORAGE
+# at redis:// if you ever run more than one process. AOTD_RATELIMIT_ENABLED=0
+# disables it entirely.
 from flask_limiter import Limiter  # noqa: E402
 from flask_limiter.util import get_remote_address  # noqa: E402
 
@@ -64,7 +65,6 @@ _RL_ENABLED = os.environ.get("AOTD_RATELIMIT_ENABLED", "1").lower() not in ("0",
 # summary + prefetch), so the default has to be roomy or a normal session 429s
 # itself. The health check (/healthz) and home page (/) are exempted outright.
 _RL_DEFAULT = os.environ.get("AOTD_RATELIMIT_DEFAULT", "1200 per hour;120 per minute")
-_RL_GENERATE = os.environ.get("AOTD_RATELIMIT_GENERATE", "10 per hour;3 per minute")
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -292,12 +292,6 @@ def artwork_of_the_day():
             "today": date_label,
             "count": len(items),
             "items": items,
-            "aiEnabled": bool(article_writer.llm_available()),
-            # When false (default), the page shows the free Wikidata summary and
-            # writes the AI article only when the reader clicks the button — so a
-            # public deploy never spends tokens/CPU on bots or idle views. Set
-            # AOTD_AUTO_GENERATE=1 to write every article automatically.
-            "autoGenerate": os.environ.get("AOTD_AUTO_GENERATE", "").lower() in ("1", "true", "yes"),
         }
         with _cache_lock:
             _day_cache["date"] = date_key
@@ -363,18 +357,11 @@ def artwork_details():
 
 
 @app.route('/artwork-article', methods=['GET'])
-@limiter.limit(
-    _RL_GENERATE,  # one string; Flask-Limiter parses the ";"-separated limits
-    # This tight budget applies ONLY to the expensive AI path; the plain Wikidata
-    # summary (generate omitted) is left to the generous default limit.
-    exempt_when=lambda: request.args.get("generate") != "1",
-)
 def artwork_article():
-    """Return a short, grounded article about one artwork + its artist.
+    """Return a short 'About' article for one artwork + its artist.
 
-    Generation is gated on AOTD_OPENAI_API_KEY; without it (or on any failure)
-    a deterministic, trivially-grounded fact summary is returned instead. Cached
-    per artwork for the process lifetime.
+    Assembled deterministically from the Wikidata dossier — no model, no API key.
+    Cached per artwork for the process lifetime.
     """
     artwork_id = request.args.get('artwork', '')
     artist_id = request.args.get('artist', '')
@@ -385,10 +372,7 @@ def artwork_article():
             "message": "Invalid or missing artwork/artist id",
         }), 400
 
-    # OpenAI is only used when explicitly requested (?generate=1). The default is
-    # the deterministic Wikidata fact summary — no model call.
-    generate = request.args.get('generate') == '1'
-    cache_key = (artwork_id, artist_id, generate)
+    cache_key = (artwork_id, artist_id)
     cached = _article_cache.get(cache_key)
     if cached:
         return jsonify(cached)
@@ -402,7 +386,7 @@ def artwork_article():
         else:
             artwork, artist = gather_details(artwork_id, artist_id)
 
-        article = article_writer.build(artwork, artist, generate=generate)
+        article = article_writer.build(artwork, artist)
         payload = {"status": "success", "article": article}
         with _cache_lock:
             _cache_set(_article_cache, cache_key, payload)
@@ -521,8 +505,8 @@ def linked_art_object(qid):
             return _ld_response({"error": "object not found"}, 404)
         base = request.host_url.rstrip("/")
         person_uri = f"{base}/person/{artist_qid}" if artist_qid else None
-        # Grounded Wikidata summary (no OpenAI) as the description.
-        summary = article_writer.build(artwork, artist, generate=False)
+        # Grounded Wikidata summary as the description.
+        summary = article_writer.build(artwork, artist)
         desc = " ".join(p for s in summary.get("sections", []) for p in s.get("paragraphs", []))
         record = linked_art.object_record(
             artwork, artist, base=base,

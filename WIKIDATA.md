@@ -318,36 +318,27 @@ project does not write to Wikidata, so they are intentionally not used here.
 
 ---
 
-## 5. Article writer (Phase 1 — implemented)
+## 5. Article writer (deterministic — no model)
 
-A short, **grounded** article about each artwork. **Wikidata is the default and
-does the heavy lifting**: every artwork shows a deterministic fact summary built
-straight from SPARQL data — no model call. OpenAI is **opt-in and used sparingly**
-— only when the reader clicks "Write an AI version" (once per artwork, then
-cached). When it does run, the model may use only the facts we hand it, and every
-sentence is mechanically verified against those facts before it's shown — so we
-never publish a number or claim that isn't backed by real data. Inspired by the
-reference repos' "publication gate", right-sized for structured facts (no
-RAG/embeddings — the evidence is ~10 facts that fit in the prompt).
+A short "About" article about each artwork, assembled **directly from the
+Wikidata dossier** — no model, no API key, no per-token cost. Because every
+sentence is composed from real Wikidata values, the result is trivially grounded:
+it can never state anything the data doesn't support. The "make it read nicely"
+step is plain Python string assembly, not generation.
 
-**Files**
-- [article_writer.py](article_writer.py) — fact packet → generation → verify → fallback.
-- [numeric_date_facts.py](numeric_date_facts.py) — every number in a sentence must appear in its cited facts (decade leniency for "1840s").
-- [support_span.py](support_span.py) — a sentence's content words must overlap its cited facts (block < 0.05 = unrelated citation, warn < 0.35). Numeric/date is the strict guard; lexical block is loose so engaging prose passes.
-- Endpoint: `GET /artwork-article?artwork=Q…&artist=Q…` → `{status, article}`. Cached per artwork; reuses the `/artwork-details` cache when warm.
+**File**
+- [article_writer.py](article_writer.py) — `build(artwork, artist)` → sectioned payload `{title, sections:[{heading, paragraphs:[…]}], mode, entities}`.
+- Endpoint: `GET /artwork-article?artwork=Q…&artist=Q…` → `{status, article}`. Cached per artwork; reuses the `/artwork-details` dossier cache when warm.
 
-**Flow** (each result cached per artwork)
-1. **Fact packet** — turn the artwork + artist detail dicts into `[{id, label, text}]`; placeholders ("Unknown"/"Untitled") are dropped.
-2. **Default = Wikidata summary** — `/artwork-article` returns a deterministic fact summary assembled straight from the facts. **No OpenAI call.** This is what every artwork shows on load.
-3. **Generate (opt-in)** — only `?generate=1` *and* a configured key triggers OpenAI. It returns a structured article (title + paragraphs of sentences, each tagged with the fact ids it used) via a strict `json_schema` response format. Model defaults to `gpt-4o-mini`. The day list reports `aiEnabled` so the frontend only shows the button when a key is present.
-4. **Verify (fail-closed gate)** — each generated sentence must cite a real fact id, its numbers must appear in those facts, and its wording must overlap them. Any blocking failure rejects the whole article and falls back to the Wikidata summary. The frontend tags results ✨ AI-written · fact-checked vs 📋 From Wikidata.
-
-**Config**
-
-| Env var | Default | Purpose |
-| --- | --- | --- |
-| `OPENAI_API_KEY` (or `AOTD_OPENAI_API_KEY`) | _(unset)_ | Either enables the opt-in "Write an AI version" button. Unset → Wikidata summary only. Read from `.env` at startup. |
-| `AOTD_ARTICLE_MODEL` | `gpt-4o-mini` | OpenAI model override (e.g. `gpt-4o` for higher quality). |
+**Sections** (each emitted only when it has supporting facts): *The painting*
+(title, creator, date, place, medium, dimensions, genre, commission, series,
+inventory) · *What it depicts* (depicted subjects + one-line glosses for named
+ones) · *The artist* (bio, dates/places, training, teachers) · *Style and
+influences* (movement, genres, influences with glosses, awards, memberships,
+students) · *Where it lives today* (holding collection + its description) · *In
+context* (contemporaries). Named entities are linked to Wikidata in the prose via
+the dossier's `_link_entities` map. The frontend tags the result **📋 From
+Wikidata**.
 
 ## 6. One-hop neighbourhood (Phase 2 — implemented)
 
@@ -366,10 +357,9 @@ silently yields nothing (learned the hard way). Entities with no English label
 (label === QID) are dropped.
 
 These feed two places:
-- **Articles get deeper for free** — `depicts` and `influenced by` join the fact
-  packet, so both the deterministic summary ("It depicts sky, mountain, Lisa del
-  Giocondo…") and the AI article have more to ground on, at **zero extra OpenAI
-  cost**.
+- **The article gets deeper for free** — `depicts` and `influenced by` (with their
+  short descriptions) feed the "What it depicts" and "Style and influences"
+  sections, so the prose can say *who Lisa del Giocondo was*, not just name her.
 - **Panel chips** — depicts / in-collection / influenced-by render as chips that
   link to `wikidata.org/wiki/<QID>` for the reader to follow.
 
@@ -396,34 +386,15 @@ comes from CC0 Wikidata — one extra dimension of data, not extra model calls.
 > rows → 45s timeout). The fix is here: scalars in a `LIMIT 1` query, multi-valued
 > fields fetched as **additive rows** via `VALUES` and grouped in Python.
 
-The dossier (now ~24 facts) drives [article_writer.py](article_writer.py):
-- **Generated** mode → a 3-5 **section** blog post (title + headings + paragraphs),
-  via a structured `json_schema`, `max_tokens` 4000.
-- **Pluggable backend** (`AOTD_LLM_BACKEND`): the **same** prompt + schema +
-  verifier run against either the hosted **OpenAI** API (paid) or a **free local
-  model via Ollama** (e.g. `gemma4:latest`). Ollama speaks the OpenAI SDK at
-  `http://localhost:11434/v1`, so only the client + model differ — set
-  `AOTD_LLM_BACKEND=ollama` to eliminate API cost. Local generation is slower
-  (cold model load ~minutes, warm ~30–60s) but cached per day. Either way, with
-  no backend configured the app serves the deterministic summary for free.
-- **Verification** is per sentence across sections; numbers are checked against the
-  **whole dossier** (every fact is real Wikidata data — a number is only
-  "fabricated" if it's nowhere in the dossier), avoiding false rejects when the
-  model combines facts in one sentence. Cite-required + support-overlap unchanged.
-  This is what makes a smaller local model safe to use — it's constrained, then
-  checked, and any ungrounded sentence is dropped.
-- **Fallback** → a deterministic 2-section summary ("The work" / "The artist").
-- Panel gains rows for teachers/students and chips for contemporaries.
+The dossier (~24 facts) drives [article_writer.py](article_writer.py)'s
+deterministic multi-section "About" article (see §5). Each neighbourhood entry
+carries a short Wikidata description, so the builder can render named entities as
+`Label (description)` glosses — *Vincent van Gogh (Dutch painter)* — without any
+model call. The panel also gains rows for teachers/students and chips for
+contemporaries.
 
-**Second-hop enrichment** (article generation only). Before generating, we take
-the *named* entities the dossier already knows (depicted people, the art
-movement, the holding museum, influences, peers — the ones carrying QIDs) and run
-**one batched SPARQL query** (`enrich_entities`) for a compact "About <X>" fact
-each: a one-line description plus life dates. Those become extra citable facts
-(~24 → ~32), so the prose can say *who Lisa del Giocondo was* and *what the
-Italian Renaissance is*, not just name them — still 100% grounded, still a single
-OpenAI call. Selection is deterministic (named entities only, capped at 8), gated
-to `generate=True` so default browsing adds no query, and cached for the day.
+> The richer the dossier, the richer the prose — all of it CC0 Wikidata, one
+> extra dimension of data rather than any model cost.
 
 **Next phases** — Wikipedia links on chips; source references (`P854`) under the
 article; per-artwork "angle" selection for variety.

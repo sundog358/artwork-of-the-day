@@ -166,24 +166,6 @@
         color: #8a949e;
         margin-left: 6px;
       }
-      .ai-btn {
-        margin-top: 10px;
-        padding: 6px 14px;
-        font-size: 0.85rem;
-        color: #2c3e50;
-        background: #fff;
-        border: 1px solid #d9cdb4;
-        border-radius: 999px;
-        cursor: pointer;
-        transition: background 0.15s ease;
-      }
-      .ai-btn:hover:not(:disabled) {
-        background: #f3ead6;
-      }
-      .ai-btn:disabled {
-        cursor: default;
-        opacity: 0.75;
-      }
       .chip-row {
         margin: 6px 0;
       }
@@ -461,8 +443,6 @@
         index: 0,
         cache: {}, // artwork_id -> { artwork, artist }
         articleCache: {}, // "<artwork_id>:sum|gen" -> article payload
-        aiEnabled: false, // is a generation backend configured server-side?
-        autoGenerate: false, // write the AI article on view, or wait for a click?
       };
 
       function esc(s) {
@@ -534,8 +514,6 @@
           state.index = 0;
           state.cache = {};
           state.articleCache = {};
-          state.aiEnabled = !!data.aiEnabled;
-          state.autoGenerate = !!data.autoGenerate;
 
           if (!state.items.length) throw new Error("No artwork found for today");
 
@@ -562,14 +540,13 @@
         return data;
       }
 
-      // ---- Article: Wikidata fact summary by default; OpenAI only on request --
-      async function fetchArticle(item, generate) {
-        const ck = item.artwork_id + (generate ? ":gen" : ":sum");
+      // ---- Article: assembled directly from Wikidata (no AI) -----------------
+      async function fetchArticle(item) {
+        const ck = item.artwork_id + ":about";
         if (state.articleCache[ck]) return state.articleCache[ck];
         const url =
           `/artwork-article?artwork=${encodeURIComponent(item.artwork_id)}` +
-          `&artist=${encodeURIComponent(item.creator_id)}` +
-          (generate ? "&generate=1" : "");
+          `&artist=${encodeURIComponent(item.creator_id)}`;
         const res = await fetch(url);
         const data = await res.json();
         if (!res.ok || data.status === "error") throw new Error(data.message || "no article");
@@ -580,43 +557,16 @@
       async function loadArticle(item) {
         const el = document.getElementById("aotd-about");
         if (!el) return;
-        // Auto-write the full article when a key is configured; otherwise show the
-        // Wikidata fact summary. Either way the result is cached per artwork, so
-        // each piece is written at most once.
-        // Default: show the free Wikidata summary and let the reader opt into the
-        // AI article via the button (renderArticle shows it). Auto-write only when
-        // the server opts in (AOTD_AUTO_GENERATE), so a public site never spends
-        // tokens on bots or views nobody asked to expand.
-        const useAI = state.aiEnabled && state.autoGenerate;
+        // Cached per artwork, so each piece is assembled at most once.
         el.innerHTML =
           `<div class="mini-loading"><div class="loading-spinner small"></div>` +
-          (useAI ? "Writing the article…" : "Summarizing from Wikidata…") +
-          `</div>`;
+          `Summarizing from Wikidata…</div>`;
         try {
-          const data = await fetchArticle(item, useAI);
+          const data = await fetchArticle(item);
           if (state.items[state.index].artwork_id !== item.artwork_id) return;
           renderArticle(item, data.article);
         } catch (e) {
           el.innerHTML = ""; // article is a nice-to-have; stay quiet on failure
-        }
-      }
-
-      async function generateArticle(item) {
-        const btn = document.getElementById("aotd-ai-btn");
-        if (btn) {
-          btn.disabled = true;
-          btn.innerHTML =
-            `<span class="loading-spinner small" style="display:inline-block;width:13px;height:13px;border-width:2px;margin:0 6px 0 0;vertical-align:-2px;"></span>Writing…`;
-        }
-        try {
-          const data = await fetchArticle(item, true); // explicit OpenAI call
-          if (state.items[state.index].artwork_id !== item.artwork_id) return;
-          renderArticle(item, data.article);
-        } catch (e) {
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = "✨ Write an AI version (retry)";
-          }
         }
       }
 
@@ -675,12 +625,8 @@
           if (el) el.innerHTML = "";
           return;
         }
-        const generated = article.mode === "generated";
-        const tag = generated
-          ? `<span class="about-tag" title="Written by an AI model, grounded only in verified Wikidata facts">✨ AI-written · fact-checked</span>`
-          : `<span class="about-tag" title="Assembled directly from Wikidata — no AI used">📋 From Wikidata</span>`;
-        const headline =
-          generated && article.title ? `<p class="aotd-headline">${esc(article.title)}</p>` : "";
+        const tag =
+          `<span class="about-tag" title="Assembled directly from Wikidata — no AI used">📋 From Wikidata</span>`;
         // Link known Wikidata entities (proper nouns from the dossier) in the
         // prose — first occurrence each, shared across the whole post.
         const entities = (article.entities || [])
@@ -696,15 +642,7 @@
             return h + paras;
           })
           .join("");
-        // Opt-in AI button: only when a key is configured and we're showing the
-        // plain Wikidata summary (so OpenAI is used sparingly, on demand).
-        const button =
-          !generated && state.aiEnabled
-            ? `<button class="ai-btn" id="aotd-ai-btn">✨ Write the full article</button>`
-            : "";
-        el.innerHTML = `<h3><i class="fas fa-feather"></i> About ${tag}</h3>${headline}${body}${button}`;
-        const btn = document.getElementById("aotd-ai-btn");
-        if (btn) btn.addEventListener("click", () => generateArticle(item));
+        el.innerHTML = `<h3><i class="fas fa-feather"></i> About ${tag}</h3>${body}`;
       }
 
       function prefetchNext() {

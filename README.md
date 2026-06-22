@@ -44,44 +44,35 @@ python serve.py                    # honors the PORT env var, default 5000
 
 ## Configuration
 
+The app is **pure Wikidata/SPARQL** — no model, no API key, no per-token cost.
+Every variable below is optional.
+
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `5000` | Port to listen on |
 | `FLASK_DEBUG` | `0` | `1`/`true` enables the dev server's debugger (never in prod) |
 | `AOTD_CONTACT` | repo URL | Contact string sent in the Wikidata `User-Agent` |
-| `AOTD_LLM_BACKEND` | `openai` if a key is set, else off | Which backend writes AI articles: `ollama` (free, local) or `openai` (paid). With neither, the app serves the deterministic Wikidata summary. |
-| `AOTD_OLLAMA_MODEL` | `gemma4:latest` | Local Ollama model (needs Ollama running + the model pulled). |
-| `AOTD_OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint. |
-| `AOTD_OLLAMA_TIMEOUT` | `300` | Seconds to wait for local generation. |
-| `OPENAI_API_KEY` (or `AOTD_OPENAI_API_KEY`) | _(unset)_ | Used when `AOTD_LLM_BACKEND=openai`. Read from `.env`. |
-| `AOTD_ARTICLE_MODEL` | `gpt-4o-mini` | OpenAI model (when using the OpenAI backend). |
+| `AOTD_RATELIMIT_DEFAULT` | `1200 per hour;120 per minute` | Per-IP limit on the Wikidata-hitting endpoints (`/` and `/healthz` are exempt) |
+| `AOTD_RATELIMIT_ENABLED` | `1` | Set `0` to disable rate limiting |
+| `AOTD_CACHE_MAX` | `512` | Max entries per in-process cache before oldest-first eviction |
 
 See [.env.example](.env.example) for a ready-to-copy config.
 
 ## Deploy
 
-The app is a standard WSGI application (`app:app`) with a `Procfile`, so it runs
-on most Python hosts (Render, Railway, Fly.io, a VPS, etc.). General steps:
+The app is a standard WSGI application (`app:app`), so it runs on most Python
+hosts (Render, Railway, Fly.io, a VPS, etc.). It needs **no secrets**. General
+steps:
 
 1. Push this repo to the host (or a Git remote it builds from).
 2. Build/install: `pip install -r requirements.txt`.
-3. Start command: `python serve.py` (the included `Procfile` already does this).
+3. Start command: `python serve.py`.
 4. Set `AOTD_CONTACT` to a real URL or email (Wikimedia asks for this).
 
-Because the content changes only once a day, putting a CDN/cache in front of it
-(or relying on the built-in daily cache + `Cache-Control: max-age=3600`) keeps
-load on Wikidata minimal.
-
-### Self-contained Docker (no API cost)
-
-For a fully self-contained deployment — the web app, the Ollama server, and a
-local LLM all baked into **one image** with no external API and no per-token
-cost — see **[DOCKER.md](DOCKER.md)**:
-
-```bash
-docker build -t artwork-of-the-day .
-docker run --rm -p 5000:5000 artwork-of-the-day      # add --gpus all if available
-```
+A [`render.yaml`](render.yaml) blueprint and a slim [`Dockerfile.web`](Dockerfile.web)
+are included; see [DEPLOY.md](DEPLOY.md) for one-click Render / Cloud Run / Railway
+deploys. Because the content changes only once a day, a CDN/cache in front (or the
+built-in daily cache + `Cache-Control`) keeps load on Wikidata minimal.
 
 ## Architecture
 

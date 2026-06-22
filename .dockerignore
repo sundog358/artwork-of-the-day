@@ -1,4 +1,4 @@
-# Never bake secrets into the image — the container uses local Ollama, no key.
+# No secrets in the image (the app needs no API key), but never bake .env anyway.
 .env
 .env.*
 !.env.example
@@ -31,8 +31,5 @@ requirements-dev.txt
 linked_art_schema/
 
 # Docker build context itself
-Dockerfile
 Dockerfile.web
 .dockerignore
-docker-compose.yml
-docker-entrypoint.sh
