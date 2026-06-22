@@ -22,6 +22,7 @@ import os
 import requests
 
 import sparql_library as S
+import wikidata_facts as WF
 
 _CONTACT = os.environ.get("AOTD_CONTACT", "https://metahistorybook.com")
 _UA = {"User-Agent": f"ArtworkOfTheDay/1.0 ({_CONTACT})"}
@@ -161,6 +162,18 @@ def build(artwork_id, artist_id, artwork, artist):
                 "paragraphs": ["The painting brings together " + _and_list(phrases) + "."],
             })
 
+    # --- 1c. Generic Wikidata narration (the schema-agnostic engine) ------ #
+    # ONE batched fetch of every statement for the key entities, narrated by the
+    # reusable library (wikidata_facts). This surfaces whatever Wikidata holds —
+    # material, commission, country of origin, significant events, copyright… —
+    # without hand-coding each property.
+    museum_qid = artwork.get("locationQid") or ((artwork.get("collection") or [{}])[0] or {}).get("qid")
+    fact_ids = [q for q in (artwork_id, artist_id, museum_qid) if q and S.QID_RE.match(q)]
+    all_stmts = WF.statements_for(fact_ids)
+    work_facts = WF.narrate(all_stmts.get(artwork_id, []), limit=8)
+    if work_facts:
+        sections.append({"heading": "The work in detail", "paragraphs": work_facts})
+
     # --- 2. Other works by the artist (+ documented output) --------------- #
     works = S.artist_works(artist_id, exclude_qid=artwork_id, limit=8)
     if works:
@@ -244,9 +257,9 @@ def build(artwork_id, artist_id, artwork, artist):
     if lineage:
         sections.append({"heading": "Lineage and peers", "paragraphs": lineage})
 
-    # --- 2e. The museum, in depth (hop-2 on the holding institution) ------ #
-    museum_qid = artwork.get("locationQid") or ((artwork.get("collection") or [{}])[0] or {}).get("qid")
+    # --- 2e. The museum, in depth (founding + generic narration) ---------- #
     if museum_qid:
+        museum_paras = []
         mcard = S.expand_entities([museum_qid]).get(museum_qid)
         if mcard:
             inc = (mcard.get("inception") or "")[:4]
@@ -254,7 +267,19 @@ def build(artwork_id, artist_id, artwork, artist):
                 mlabel, desc = mcard.get("label") or "the museum", mcard.get("description")
                 sent = f"Founded in {inc}, {mlabel}"
                 sent += f" is {_a_or_an(desc)} {desc}." if desc else "."
-                sections.append({"heading": "The museum", "paragraphs": [sent]})
+                museum_paras.append(sent)
+        # Extra museum facts via the generic engine (owned by, founded by, awards…).
+        museum_paras += WF.narrate(all_stmts.get(museum_qid, []), skip={"P571"}, limit=4)
+        if museum_paras:
+            sections.append({"heading": "The museum", "paragraphs": museum_paras})
+
+    # --- 2f. More about the artist (generic facts beyond the basics) ------ #
+    # Skip what the base article + earlier layers already cover; surface the rest.
+    artist_skip = {"P166", "P463", "P69", "P1066", "P802", "P737", "P106", "P27",
+                   "P135", "P136", "P800", "P569", "P570", "P19", "P20", "P26"}
+    more_artist = WF.narrate(all_stmts.get(artist_id, []), skip=artist_skip, limit=6)
+    if more_artist:
+        sections.append({"heading": "More about the artist", "paragraphs": more_artist})
 
     # --- 3. Richer artwork facts ------------------------------------------ #
     ctx = S.artwork_context(artwork_id)
