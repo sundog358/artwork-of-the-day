@@ -77,6 +77,26 @@
       .img-container:hover .artwork-image {
         transform: scale(1.02);
       }
+      .img-credit {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        font-size: 0.72rem;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.55);
+        padding: 3px 9px;
+        border-radius: 999px;
+        text-decoration: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .img-container:hover .img-credit {
+        opacity: 1;
+      }
+      .img-credit:hover {
+        background: rgba(0, 0, 0, 0.8);
+      }
       .enlarge {
         position: absolute;
         bottom: 20px;
@@ -433,12 +453,15 @@
       <footer class="site-footer">
         <div class="footer-copy">&copy; Sun &amp; Rain Works 2026</div>
         <div class="footer-sub">
-          Data &amp; images from
+          Data from
           <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a>
-          &amp;
+          (CC0), text from
+          <a href="https://en.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>
+          (CC BY-SA), images from
           <a href="https://commons.wikimedia.org" target="_blank" rel="noopener"
             >Wikimedia Commons</a
-          >&nbsp;· image licenses vary.
+          >&nbsp;·
+          <a href="/legal">Licenses &amp; attribution</a>
         </div>
       </footer>
     </div>
@@ -468,6 +491,13 @@
               "'": "&#39;",
             }[c])
         );
+      }
+
+      // Turn a Commons FilePath thumbnail URL into its File: description page,
+      // which carries the specific image's author, license, and reuse terms.
+      function commonsFilePage(url) {
+        const m = (url || "").match(/Special:FilePath\/([^?]+)/);
+        return m ? "https://commons.wikimedia.org/wiki/File:" + m[1] : "";
       }
 
       function updateLoadingProgress(progress, status) {
@@ -753,6 +783,11 @@
                   : ""
               }
               <div class="enlarge"><i class="fas fa-expand"></i></div>
+              ${
+                commonsFilePage(item.image)
+                  ? `<a class="img-credit" href="${esc(commonsFilePage(item.image))}" target="_blank" rel="noopener" title="Image author &amp; license on Wikimedia Commons" onclick="event.stopPropagation()">&#9432; source &amp; license</a>`
+                  : ""
+              }
             </div>
             <div class="artwork-info">
               <h2 id="aotd-title">Loading…</h2>

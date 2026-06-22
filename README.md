@@ -83,7 +83,16 @@ built-in daily cache + `Cache-Control`) keeps load on Wikidata minimal.
 - `static/index.html` — the single-page frontend (vanilla JS).
 - `WIKIDATA.md` — Wikidata/Wikibase query and data-model reference.
 
-## Attribution
+## Licensing & attribution
 
-Data is from Wikidata (CC0). Images are from Wikimedia Commons under their
-individual licenses — see each file on Commons.
+- **Application code** — MIT (see [LICENSE](LICENSE)).
+- **Facts & structured data** — [Wikidata](https://www.wikidata.org), CC0 1.0.
+- **Encyclopedic text** (the "About" overviews) — [Wikipedia](https://en.wikipedia.org),
+  CC BY-SA 4.0; attributed inline and linked to the source article.
+- **Images** — [Wikimedia Commons](https://commons.wikimedia.org), each under its
+  own license; every image links to its Commons file page for author + license.
+
+The full, user-facing breakdown lives at **`/legal`** (served from
+[static/legal.html](static/legal.html)) and is linked from the site footer.
+Attribution is maintained **live** — each item links back to its Wikidata item,
+Commons file, and Wikipedia source — rather than as a static list.

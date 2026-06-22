@@ -240,6 +240,14 @@ def healthz():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route('/legal')
+@app.route('/license')
+@limiter.exempt  # a static informational page; no need to rate limit
+def legal():
+    """Licenses & attribution page (Wikidata CC0, Wikipedia CC BY-SA, Commons)."""
+    return app.send_static_file('legal.html')
+
+
 # Most artworks to expose in the day's gallery.
 MAX_GALLERY = 30
 
