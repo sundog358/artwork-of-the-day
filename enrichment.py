@@ -19,6 +19,7 @@ The frontend appends the sections (reusing the same renderer + entity linking).
 """
 import concurrent.futures as _cf
 import os
+import re
 
 import requests
 
@@ -129,6 +130,27 @@ def _wiki_title(url):
     return url.rsplit("/wiki/", 1)[-1] if url and "/wiki/" in url else ""
 
 
+def _context_wikipedia(context_qids):
+    """Pull Wikipedia lead summaries for the CONTEXT entities (museum, movement,
+    teacher, sitter, genre, city) — one batched sitelink lookup, then the
+    summaries fetched sequentially (a handful, ~0.3s each). Returns
+    [{title, extract, url}] for those that have an article."""
+    qids = [q for q in dict.fromkeys(context_qids) if q and S.QID_RE.match(q)]
+    if not qids:
+        return []
+    titles = S.wikipedia_sitelinks(qids)
+    out, seen = [], set()
+    for q in qids:  # preserve the priority order of context_qids
+        t = titles.get(q)
+        if not t:
+            continue
+        summ = wikipedia_summary(t)
+        if summ and summ["title"] not in seen:
+            seen.add(summ["title"])
+            out.append(summ)
+    return out
+
+
 def build(artwork_id, artist_id, artwork, artist):
     artwork = artwork or {}
     artist = artist or {}
@@ -169,10 +191,26 @@ def build(artwork_id, artist_id, artwork, artist):
     mv_qids = [m["qid"] for m in trad["movements"]]
     nat = trad["nationality"][0]["qid"] if trad["nationality"] else ""
 
+    # Context entities to fetch Wikipedia summaries for (prioritised, capped to
+    # avoid a wall of paragraphs): movement, museum, teacher, sitter, genre, city.
+    context_qids = [q for q in (
+        (mv_qids[0] if mv_qids else None),
+        museum_qid or None,
+        (teacher_qids[0] if teacher_qids else None),
+        (depict_ids[0] if depict_ids else None),
+        (genre_qids[0] if genre_qids else None),
+        artist.get("birthPlaceQid"),
+    ) if q][:3]
+
     # ---- Step B: every remaining fetch runs concurrently ----------------- #
     tasks = {
         "awk_wiki": lambda: wikipedia_summary(S.wikipedia_sitelink(artwork_id)),
         "art_wiki": lambda: wikipedia_summary(_wiki_title(artist.get("wikipedia"))),
+        "ctx_wiki": (lambda: _context_wikipedia(context_qids)) if context_qids else (lambda: []),
+        "events_dated": lambda: S.dated_values(artwork_id, "P793"),
+        "awards_dated": lambda: S.dated_values(artist_id, "P166"),
+        "same_collection": (lambda: S.notable_artworks_by([museum_qid], "P195", exclude=artwork_id, limit=5)) if museum_qid else (lambda: []),
+        "same_movement": (lambda: S.notable_artworks_by(mv_qids, "P135", exclude=artwork_id, limit=5)) if mv_qids else (lambda: []),
         "depict_cards": (lambda: S.expand_entities(depict_ids)) if depict_ids else (lambda: {}),
         "stmts": lambda: WF.statements_for(fact_ids),
         "works": lambda: S.artist_works(artist_id, exclude_qid=artwork_id, limit=8),
@@ -207,6 +245,14 @@ def build(artwork_id, artist_id, artwork, artist):
         sections.append({"heading": f"About {name}", "paragraphs": [art["extract"]]})
         add_source(f"Wikipedia: {art['title']}", art["url"])
 
+    # Context: encyclopedic paragraphs about the museum / movement / teacher /
+    # genre / sitter / city — deepens the article with real prose, all attributed.
+    for c in g("ctx_wiki", []):
+        if c["title"] in (awk and awk["title"], art and art["title"]):
+            continue  # don't repeat the artwork/artist summaries
+        sections.append({"heading": f"About {c['title']}", "paragraphs": [c["extract"]]})
+        add_source(f"Wikipedia: {c['title']}", c["url"])
+
     # 1b. The subjects in depth (expanded depicted entities).
     cards = g("depict_cards", {})
     if depict_ids and cards:
@@ -215,8 +261,12 @@ def build(artwork_id, artist_id, artwork, artist):
             sections.append({"heading": "A closer look at the subjects",
                              "paragraphs": ["The painting brings together " + _and_list(phrases) + "."]})
 
-    # 1c. The work in detail (generic narration of the artwork's statements).
-    work_facts = WF.narrate(all_stmts.get(artwork_id, []), limit=8)
+    # 1c. The work in detail (generic narration + dated significant events).
+    work_facts = WF.narrate(all_stmts.get(artwork_id, []), skip={"P793"}, limit=8)
+    ev = g("events_dated", [])
+    if ev:
+        parts = [f"{lbl} ({yr})" if yr else lbl for lbl, yr in ev]
+        work_facts.append("It has witnessed " + _and_list(parts) + ".")
     if work_facts:
         sections.append({"heading": "The work in detail", "paragraphs": work_facts})
 
@@ -292,6 +342,30 @@ def build(artwork_id, artist_id, artwork, artist):
     if lineage:
         sections.append({"heading": "Lineage and peers", "paragraphs": lineage})
 
+    # 2d2. Related works — other notable paintings in the same collection / movement
+    # (clickable rabbit holes).
+    def _works(phrase, items):
+        if not items:
+            return None
+        for w in items:
+            entities.append({"label": w["label"], "qid": w["qid"], "open": "artwork"})
+        return phrase + _and_list([w["label"] for w in items]) + "."
+
+    related = []
+    sc = g("same_collection", [])
+    if sc:
+        loc = artwork.get("location")
+        where = (R.get("museum_card") or {}).get("label") or (loc if loc and loc != "Unknown" else "the same collection")
+        s = _works(f"Also held at {where}: ", sc)
+        if s:
+            related.append(s)
+    if mv_qids:
+        s = _works(f"Other {trad['movements'][0]['label']} paintings include ", g("same_movement", []))
+        if s:
+            related.append(s)
+    if related:
+        sections.append({"heading": "Related works", "paragraphs": related})
+
     # 2e. The museum, in depth (founding + generic narration).
     if museum_qid:
         museum_paras = []
@@ -311,6 +385,10 @@ def build(artwork_id, artist_id, artwork, artist):
     artist_skip = {"P166", "P463", "P69", "P1066", "P802", "P737", "P106", "P27",
                    "P135", "P136", "P800", "P569", "P570", "P19", "P20", "P26"}
     more_artist = WF.narrate(all_stmts.get(artist_id, []), skip=artist_skip, limit=6)
+    aw_dated = g("awards_dated", [])
+    if aw_dated:
+        parts = [f"{lbl} ({yr})" if yr else lbl for lbl, yr in aw_dated[:5]]
+        more_artist = ["Honours include " + _and_list(parts) + "."] + more_artist
     if more_artist:
         sections.append({"heading": "More about the artist", "paragraphs": more_artist})
 
@@ -326,12 +404,31 @@ def build(artwork_id, artist_id, artwork, artist):
     if facts:
         sections.append({"heading": "Exhibitions and context", "paragraphs": facts})
 
-    # 4. Period & place framing.
+    # 4. Period & place framing (+ the work's place in the artist's life).
     framing = []
     era = _era((artwork.get("creationDateRaw") or "")[:4] or artwork.get("creationDate"))
     title = artwork.get("title")
     if era and title and title != "Untitled":
         framing.append(f"{title} dates from {era}.")
+
+    def _yr(s):
+        m = re.search(r"\d{4}", s or "")
+        return int(m.group()) if m else None
+
+    born_y = _yr(artist.get("birthdate"))
+    made_y = _yr(artwork.get("creationDateRaw") or artwork.get("creationDate"))
+    stats = g("work_stats", {})
+    if born_y and made_y and made_y >= born_y:
+        sentence = f"{name} painted it in {made_y}, at the age of {made_y - born_y}"
+        try:
+            fi, la = int(stats.get("first")), int(stats.get("last"))
+            if la > fi:
+                pos = (made_y - fi) / (la - fi)
+                stage = "an early-career work" if pos < 0.34 else "a late-career work" if pos > 0.66 else "a mid-career work"
+                sentence += f" — {stage} in an output spanning {fi}–{la}"
+        except (TypeError, ValueError):
+            pass
+        framing.append(sentence + ".")
     info = g("place_gloss", {})
     gq = artwork.get("genreQid")
     if gq and info.get(gq, {}).get("description"):

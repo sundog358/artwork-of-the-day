@@ -819,6 +819,108 @@ def artist_work_stats(artist_id):
     return out
 
 
+def wikipedia_sitelinks(qids, lang="en"):
+    """Batched: {qid: 'Article_Title'} for entities that have a Wikipedia article.
+    Lets us pull encyclopedic summaries for context entities (museum, genre,
+    teacher, movement, sitter) in one round-trip instead of one query each."""
+    valid = [q for q in dict.fromkeys(qids) if QID_RE.match(q)]
+    out = {}
+    if not valid:
+        return out
+    values = " ".join(f"wd:{q}" for q in valid)
+    query = """
+    SELECT ?e ?article WHERE {
+      VALUES ?e { %s }
+      ?article schema:about ?e; schema:isPartOf <https://%s.wikipedia.org/>.
+    }
+    """ % (values, lang)
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"wikipedia_sitelinks error: {e}")
+        return out
+    for r in rows:
+        q, url = qid(_v(r, "e")), _v(r, "article")
+        if q and "/wiki/" in url and q not in out:
+            out[q] = url.rsplit("/wiki/", 1)[-1]
+    return out
+
+
+def notable_artworks_by(seed_qids, pid, exclude="", limit=6, min_links=2):
+    """Notable PAINTINGS linked to a seed via `pid` (same collection P195, same
+    movement P135), with an image so they are openable, ranked by sitelinks.
+    Returns [{qid, label}] — clickable 'more rabbit holes'."""
+    valid = [q for q in dict.fromkeys(seed_qids) if QID_RE.match(q)]
+    if not valid:
+        return []
+    values = " ".join(f"wd:{q}" for q in valid)
+    excl = f"FILTER(?w != wd:{exclude})" if QID_RE.match(exclude) else ""
+    query = """
+    SELECT ?w ?wLabel (MAX(?sl) AS ?links) WHERE {
+      VALUES ?seed { %s }
+      ?w wdt:%s ?seed; wdt:P31 wd:Q3305213; wdt:P18 ?img; wikibase:sitelinks ?sl.
+      FILTER(?sl >= %d)
+      %s
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?w ?wLabel
+    ORDER BY DESC(?links)
+    LIMIT %d
+    """ % (values, pid, min_links, excl, limit * 2)
+    return _collect_works(query)
+
+
+def _collect_works(query, limit=6):
+    try:
+        rows = run_sparql(query, timeout=40)
+    except Exception as e:
+        print(f"_collect_works error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        q, label = qid(_v(r, "w")), _v(r, "wLabel")
+        if q and label and not QID_RE.match(label) and q not in seen:
+            seen.add(q)
+            out.append({"qid": q, "label": label})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def dated_values(qid_, pid, limit=8):
+    """Statement values with their point-in-time (P585) / start-time (P580)
+    qualifier — [(label, year)] sorted by year. Powers dated narration like
+    'stolen 1911, recovered 1913' and 'awarded X (1903)'."""
+    if not QID_RE.match(qid_):
+        return []
+    query = """
+    SELECT ?vLabel ?date WHERE {
+      wd:%s p:%s ?st.
+      ?st ps:%s ?v.
+      OPTIONAL { ?st pq:P585 ?d1. }
+      OPTIONAL { ?st pq:P580 ?d2. }
+      BIND(COALESCE(?d1, ?d2) AS ?date)
+      ?v rdfs:label ?vLabel. FILTER(LANG(?vLabel) = "en")
+    }
+    LIMIT 60
+    """ % (qid_, pid, pid)
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"dated_values error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        label = _v(r, "vLabel")
+        year = _v(r, "date")[:4]
+        if label and not QID_RE.match(label) and label not in seen:
+            seen.add(label)
+            out.append((label, year if year.isdigit() else ""))
+    # dated entries first (by year), then undated
+    out.sort(key=lambda lv: (lv[1] == "", lv[1]))
+    return out[:limit]
+
+
 # --------------------------------------------------------------------------- #
 # Orchestrator                                                                 #
 # --------------------------------------------------------------------------- #
