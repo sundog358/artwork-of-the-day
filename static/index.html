@@ -1248,13 +1248,20 @@
         if (back) back.addEventListener("click", goBack);
         if (surprise) surprise.addEventListener("click", surpriseMe);
         if (today) today.addEventListener("click", fetchArtwork);
-        if (dateInput)
-          dateInput.addEventListener("change", () => {
+        if (dateInput) {
+          // Fire on BOTH input and change: some browsers (and keyboard/calendar
+          // interactions) only emit one of them. Guard so we fetch once per date.
+          let lastMD = "";
+          const onDate = () => {
             const v = dateInput.value; // YYYY-MM-DD
-            const m = v && v.slice(5, 7),
-              d = v && v.slice(8, 10);
-            if (m && d) pickDate(parseInt(m, 10), parseInt(d, 10));
-          });
+            const md = v ? v.slice(5) : ""; // MM-DD
+            if (!md || md === lastMD) return;
+            lastMD = md;
+            pickDate(parseInt(md.slice(0, 2), 10), parseInt(md.slice(3, 5), 10));
+          };
+          dateInput.addEventListener("change", onDate);
+          dateInput.addEventListener("input", onDate);
+        }
       }
 
       document.addEventListener("DOMContentLoaded", () => {
