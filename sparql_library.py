@@ -532,6 +532,95 @@ def artwork_context(artwork_id):
     return out
 
 
+def artist_collections(artist_id, limit=10):
+    """Distinct museums/collections that hold this artist's paintings (P195
+    across their P170 works), most-held first. Returns a list of labels —
+    institutional context ('held in collections including the Met, the MFA…')."""
+    if not QID_RE.match(artist_id):
+        return []
+    query = """
+    SELECT ?cLabel (COUNT(?w) AS ?n) WHERE {
+      ?w wdt:P170 wd:%s; wdt:P31 wd:Q3305213; wdt:P195 ?c.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    GROUP BY ?cLabel
+    ORDER BY DESC(?n)
+    LIMIT 25
+    """ % artist_id
+    try:
+        rows = run_sparql(query, timeout=30)
+    except Exception as e:
+        print(f"artist_collections error: {e}")
+        return []
+    out, seen = [], set()
+    for r in rows:
+        label = _v(r, "cLabel")
+        if label and not QID_RE.match(label) and label not in seen:
+            seen.add(label)
+            out.append(label)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def artist_identifiers(artist_id):
+    """Authority/research identifiers for outbound links: VIAF (P214), Getty ULAN
+    (P245), RKD (P650), Library of Congress (P244), Commons category (P373)."""
+    out = {}
+    if not QID_RE.match(artist_id):
+        return out
+    query = """
+    SELECT ?viaf ?ulan ?rkd ?loc ?commons WHERE {
+      OPTIONAL { wd:%s wdt:P214 ?viaf. }
+      OPTIONAL { wd:%s wdt:P245 ?ulan. }
+      OPTIONAL { wd:%s wdt:P650 ?rkd. }
+      OPTIONAL { wd:%s wdt:P244 ?loc. }
+      OPTIONAL { wd:%s wdt:P373 ?commons. }
+    }
+    LIMIT 1
+    """ % ((artist_id,) * 5)
+    try:
+        rows = run_sparql(query, timeout=25)
+    except Exception as e:
+        print(f"artist_identifiers error: {e}")
+        return out
+    if not rows:
+        return out
+    for k in ("viaf", "ulan", "rkd", "loc", "commons"):
+        v = _v(rows[0], k)
+        if v:
+            out[k] = v
+    return out
+
+
+def artist_relations(artist_id):
+    """People around the artist: spouse (P26), students (P802), and artists who
+    cite them as an influence (reverse P737). Returns {spouse, students,
+    influenced} label lists."""
+    out = {"spouse": [], "students": [], "influenced": []}
+    if not QID_RE.match(artist_id):
+        return out
+    query = """
+    SELECT ?rel ?vLabel WHERE {
+      { wd:%s wdt:P26 ?v. BIND("spouse" AS ?rel) }
+      UNION { wd:%s wdt:P802 ?v. BIND("students" AS ?rel) }
+      UNION { ?v wdt:P737 wd:%s. BIND("influenced" AS ?rel) }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+    LIMIT 60
+    """ % ((artist_id,) * 3)
+    try:
+        rows = run_sparql(query, timeout=25)
+    except Exception as e:
+        print(f"artist_relations error: {e}")
+        return out
+    for r in rows:
+        rel, label = _v(r, "rel"), _v(r, "vLabel")
+        if rel in out and label and not QID_RE.match(label) and label not in out[rel]:
+            out[rel].append(label)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Orchestrator                                                                 #
 # --------------------------------------------------------------------------- #

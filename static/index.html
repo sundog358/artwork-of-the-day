@@ -667,10 +667,19 @@
               `<a class="wd-link" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`
           )
           .join(" · ");
+        const links = (enr.links || [])
+          .map(
+            (l) =>
+              `<a class="wd-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+          )
+          .join(" · ");
+        const explore = links
+          ? `<p class="aotd-sources"><strong>Explore further:</strong> ${links}</p>`
+          : "";
         const credit = sources
           ? `<p class="aotd-sources">Sources: ${sources} <span class="src-note">(Wikipedia text: CC BY-SA)</span></p>`
           : "";
-        slot.innerHTML = body + credit;
+        slot.innerHTML = body + explore + credit;
       }
 
       // Wrap known entity labels in the text with links to Wikidata. Uses plain

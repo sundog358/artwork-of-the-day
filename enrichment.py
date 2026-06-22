@@ -116,16 +116,28 @@ def build(artwork_id, artist_id, artwork, artist):
         sections.append({"heading": f"About {name}", "paragraphs": [art["extract"]]})
         add_source(f"Wikipedia: {art['title']}", art["url"])
 
-    # --- 2. Other works by the artist ------------------------------------- #
+    # --- 2. Other works by the artist (+ documented career span) ---------- #
     works = S.artist_works(artist_id, exclude_qid=artwork_id, limit=8)
     if works:
         phrases = [f"{w['label']} ({w['year']})" if w["year"] else w["label"] for w in works[:6]]
-        sections.append({
-            "heading": "Other works by the artist",
-            "paragraphs": [f"Other paintings by {name} include " + _and_list(phrases) + "."],
-        })
+        paras = [f"Other paintings by {name} include " + _and_list(phrases) + "."]
+        years = sorted(int(w["year"]) for w in works if w.get("year", "").isdigit())
+        if len(years) >= 2 and years[0] != years[-1]:
+            paras.append(f"Their documented paintings on Wikidata span {years[0]}–{years[-1]}.")
+        sections.append({"heading": "Other works by the artist", "paragraphs": paras})
         for w in works[:6]:
             entities.append({"label": w["label"], "qid": w["qid"]})
+
+    # --- 2b. Collections that hold the artist's work ---------------------- #
+    collections = S.artist_collections(artist_id, limit=8)
+    if collections:
+        sections.append({
+            "heading": "Where the artist's work is held",
+            "paragraphs": [
+                f"Beyond this piece, {name}'s paintings are held in collections including "
+                + _and_list(collections) + "."
+            ],
+        })
 
     # --- 3. Richer artwork facts ------------------------------------------ #
     ctx = S.artwork_context(artwork_id)
@@ -161,4 +173,32 @@ def build(artwork_id, artist_id, artwork, artist):
     if framing:
         sections.append({"heading": "Period and place", "paragraphs": framing})
 
-    return {"sections": sections, "otherWorks": works, "sources": sources, "entities": entities}
+    # --- 5. Circle and legacy --------------------------------------------- #
+    rel = S.artist_relations(artist_id)
+    circle = []
+    if rel["spouse"]:
+        circle.append(f"{name} was married to {_and_list(rel['spouse'])}.")
+    if rel["students"]:
+        circle.append(f"Among {name}'s students were {_and_list(rel['students'][:6])}.")
+    if rel["influenced"]:
+        circle.append(f"Artists who cite {name} as an influence include {_and_list(rel['influenced'][:6])}.")
+    if circle:
+        sections.append({"heading": "Circle and legacy", "paragraphs": circle})
+
+    # --- 6. Research links (authority files) ------------------------------ #
+    ids = S.artist_identifiers(artist_id)
+    links = []
+    if ids.get("viaf"):
+        links.append({"label": "VIAF", "url": f"https://viaf.org/viaf/{ids['viaf']}"})
+    if ids.get("ulan"):
+        links.append({"label": "Getty ULAN", "url": f"https://vocab.getty.edu/page/ulan/{ids['ulan']}"})
+    if ids.get("rkd"):
+        links.append({"label": "RKD", "url": f"https://rkd.nl/en/explore/artists/{ids['rkd']}"})
+    if ids.get("loc"):
+        links.append({"label": "Library of Congress", "url": f"https://id.loc.gov/authorities/names/{ids['loc']}"})
+    if ids.get("commons"):
+        links.append({"label": "Wikimedia Commons",
+                      "url": "https://commons.wikimedia.org/wiki/Category:" + ids["commons"].replace(" ", "_")})
+
+    return {"sections": sections, "otherWorks": works, "sources": sources,
+            "entities": entities, "links": links}
