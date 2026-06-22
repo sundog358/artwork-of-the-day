@@ -13,12 +13,15 @@ sentence is a real Wikidata fact or attributed Wikipedia text.
 
 **▶ Live: [metahistorybook.com](https://metahistorybook.com)**
 
-<!-- Add two screenshots to docs/ to complete the showcase:
-     docs/screenshot.png (light) and docs/gallery.png (dark gallery mode). -->
-<!--
-![Artwork of the Day](docs/screenshot.png)
-![Gallery mode](docs/gallery.png)
--->
+![Explore the knowledge graph — click any linked name to jump to that artist's work](public/explore.gif)
+
+> Click any underlined name (*Mary Cassatt*, here, from Paxton's "Lineage and
+> peers") and the app jumps to one of *their* paintings — a knowledge-graph
+> rabbit hole, all from open data.
+
+| Light | Gallery (dark) mode |
+| --- | --- |
+| ![Light mode](public/hero.jpeg) | ![Gallery mode](public/gallery.jpeg) |
 
 ---
 
