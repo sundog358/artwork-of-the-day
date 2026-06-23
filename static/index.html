@@ -3,6 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Google tag (gtag.js) — GA4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-HBT1Q7R25N"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-HBT1Q7R25N");
+    </script>
+
     <title>Meta History Book — Artwork of the Day</title>
     <meta
       id="meta-desc"
@@ -1349,6 +1361,16 @@
         document.getElementById("aotd-artist").innerHTML = artistSectionHTML(artist);
         document.getElementById("aotd-artwork").innerHTML = artworkSectionHTML(artwork);
         updateMeta(artwork, artist, name);
+
+        // GA4: one event per painting actually viewed (daily flip, explore,
+        // surprise, or a shared link) — so reports show which works draw interest.
+        if (window.gtag && state.current) {
+          gtag("event", "view_artwork", {
+            artwork_id: state.current.artwork_id,
+            artwork_title: artwork.title || "Untitled",
+            artist_name: name || "(unknown)",
+          });
+        }
       }
 
       // SEO/social: per-artwork page title, Open Graph / Twitter tags (so a

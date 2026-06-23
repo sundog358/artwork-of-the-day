@@ -124,7 +124,9 @@ Deliberate scope decisions — as important as the roadmap itself.
   stays that way. If natural-language smoothing is ever revisited, it would be an
   *optional, fact-checked* layer behind a flag — never free-writing.
 - **No write-back to Wikidata** — this is a read-only consumer of open data.
-- **No user accounts or tracking** — favourites stay client-side.
+- **No personal accounts** — no login or per-user profiles; favourites stay
+  client-side. Aggregate traffic analytics (Google Analytics 4) are used only to
+  understand overall usage.
 - **No scraping or un-attributed reuse** — every source is linked and licensed.
 
 ---
