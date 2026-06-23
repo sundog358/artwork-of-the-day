@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Google tag (gtag.js) — GA4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-HBT1Q7R25N"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-J9411C51T8"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag() {
         dataLayer.push(arguments);
       }
       gtag("js", new Date());
-      gtag("config", "G-HBT1Q7R25N");
+      gtag("config", "G-J9411C51T8");
     </script>
 
     <title>Meta History Book — Artwork of the Day</title>
@@ -1178,6 +1178,13 @@
           state.current = data.item;
           updateControls();
           showCurrent();
+          // GA4: a step deeper into the rabbit hole — `depth` is how far down.
+          if (window.gtag && prev)
+            gtag("event", "explore", {
+              explore_kind: kind,
+              target_id: qid,
+              depth: state.stack.length,
+            });
         } catch (e) {
           // Couldn't open (e.g. no image) — restore the previous view, note it.
           state.current = prev;
@@ -1559,6 +1566,7 @@
       async function openLightbox(item) {
         const lb = ensureLightbox();
         lb.classList.add("open");
+        if (window.gtag) gtag("event", "deep_zoom_open", { artwork_id: item.artwork_id });
         document.body.style.overflow = "hidden";
         const titleEl = document.getElementById("aotd-title");
         lb.querySelector(".lb-title").textContent = (titleEl && titleEl.textContent) || "";
@@ -1634,6 +1642,12 @@
             const cur = state.current;
             if (!cur || !cur.artwork_id) return;
             const url = `${location.origin}/a/${cur.artwork_id}`;
+            if (window.gtag)
+              gtag("event", "share", {
+                method: "copy_link",
+                content_type: "artwork",
+                item_id: cur.artwork_id,
+              });
             try {
               await navigator.clipboard.writeText(url);
               toast("Link copied — preview shows this painting.");
