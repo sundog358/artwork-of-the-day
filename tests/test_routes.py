@@ -24,6 +24,7 @@ def client():
         APP._article_cache,
         APP._resolve_cache,
         APP._date_cache,
+        APP._share_cache,
     ):
         c.clear()
     APP._day_cache["date"] = None
@@ -234,3 +235,29 @@ def test_iiif_404_without_image(client, monkeypatch):
     monkeypatch.setattr(SL, "artwork_facts", lambda q: {"title": "x", "image": ""})
     r = client.get("/iiif/Q12418/manifest.json")
     assert r.status_code == 404
+
+
+# --- Social share / link previews ------------------------------------------- #
+def test_share_route_renders_per_artwork_og_tags(client, monkeypatch):
+    monkeypatch.setattr(SL, "creator_of", lambda q: "Q762")
+    monkeypatch.setattr(SL, "build_dossier", lambda aw, ar: (dict(ARTWORK), dict(ARTIST)))
+    monkeypatch.setattr(iiif, "image_info", lambda url: ("https://upload/x.jpg", 1000, 1500))
+    r = client.get("/a/Q12418")
+    body = r.get_data(as_text=True)
+    assert r.status_code == 200
+    assert r.headers["Content-Type"].startswith("text/html")
+    # title + og:title carry the painting + artist, server-side (crawler-visible)
+    assert "<title>Mona Lisa — Leonardo da Vinci · Meta History Book</title>" in body
+    # og:image points at the painting (1200-wide Commons thumb), not the logo
+    assert 'property="og:image" content="https://commons.wikimedia.org' in body
+    assert "Mona%20Lisa.jpg?width=1200" in body
+    # canonical + og:url point at the share URL; dimensions filled
+    assert "/a/Q12418" in body
+    assert 'property="og:image:width" content="1000"' in body
+    assert 'property="og:image:height" content="1500"' in body
+
+
+def test_share_route_bad_id_serves_plain_app(client):
+    r = client.get("/a/not-a-qid")
+    assert r.status_code == 200
+    assert "Meta History Book" in r.get_data(as_text=True)  # the default SPA, no per-artwork OG

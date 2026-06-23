@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import random
@@ -130,6 +131,7 @@ _enrichment_cache: "OrderedDict[Any, Any]" = OrderedDict()  # progressive enrich
 _date_cache: "OrderedDict[Any, Any]" = OrderedDict()  # galleries for a month/day (explore)
 _resolve_cache: "OrderedDict[Any, Any]" = OrderedDict()  # explore: QID -> displayable item
 _la_cache: "OrderedDict[Any, Any]" = OrderedDict()  # Linked Art records: (kind, qid) -> record
+_share_cache: "OrderedDict[Any, Any]" = OrderedDict()  # /a/<qid> -> server-rendered share HTML
 
 
 def run_sparql(query, timeout=45):
@@ -982,6 +984,98 @@ def iiif_manifest(qid):
     except Exception as e:
         print(f"Error in iiif_manifest: {e}")
         return _ld_response({"error": str(e)}, 500)
+
+
+# --- Social share / link previews ------------------------------------------ #
+# Social crawlers (Facebook, LinkedIn, Slack, iMessage, Discord, X) don't run
+# JavaScript, so the SPA's client-side meta updates are invisible to them.
+# /a/<qid> serves the same SPA but with per-painting Open Graph tags rendered
+# *server-side*, so a shared link previews the actual artwork. Humans hitting the
+# URL get the SPA, which reads the path and opens that painting.
+_index_cache: dict = {"html": None}
+
+
+def _index_html():
+    if _index_cache["html"] is None:
+        with open(os.path.join(app.static_folder, "index.html"), encoding="utf-8") as f:
+            _index_cache["html"] = f.read()
+    return _index_cache["html"]
+
+
+def _set_tag(doc, el_id, attr, value):
+    """Replace the `attr` value of the tag carrying id="el_id" (meta/link)."""
+    pat = re.compile(r'(<[^>]*\bid="' + re.escape(el_id) + r'"[^>]*?\b' + attr + r'=")[^"]*(")')
+    return pat.sub(lambda m: m.group(1) + html.escape(value, quote=True) + m.group(2), doc, count=1)
+
+
+def _render_share(qid, artwork, artist):
+    base = request.host_url.rstrip("/")
+    title = artwork.get("title") or "Untitled"
+    name = (artist or {}).get("name") or ""
+    headline = f"{title} — {name}" if name else title
+    page_title = f"{headline} · Meta History Book"
+    summary = article_writer.build(artwork, artist)
+    first = next((p for s in summary.get("sections", []) for p in s.get("paragraphs", []) if p), "")
+    desc = first.strip()[:300] or f"{headline} — explore the art history behind it."
+
+    raw = (artwork.get("image") or "").split("?")[0]
+    if raw:
+        image = f"{raw}?width=1200"  # a sensibly-sized Commons thumbnail for previews
+        _, w, h = iiif.image_info(artwork.get("image"))
+        og_w = min(1200, w) if w else 0
+        og_h = round(og_w * h / w) if (w and h) else 0
+    else:
+        image, og_w, og_h = f"{base}/static/8sprocket.jpg", 0, 0
+    share_url = f"{base}/a/{qid}"
+    alt = f"{title}, by {name}" if name else title
+
+    doc = _index_html()
+    doc = re.sub(
+        r"<title>.*?</title>", f"<title>{html.escape(page_title)}</title>", doc, count=1, flags=re.S
+    )
+    for el_id, val in {
+        "meta-desc": desc,
+        "og-title": headline,
+        "og-desc": desc,
+        "og-image": image,
+        "og-image-alt": alt,
+        "og-url": share_url,
+        "tw-title": headline,
+        "tw-desc": desc,
+        "tw-image": image,
+    }.items():
+        doc = _set_tag(doc, el_id, "content", val)
+    doc = _set_tag(doc, "canonical", "href", share_url)
+    if og_w and og_h:
+        doc = _set_tag(doc, "og-image-w", "content", str(og_w))
+        doc = _set_tag(doc, "og-image-h", "content", str(og_h))
+    return doc
+
+
+@app.route("/a/<qid>", methods=["GET"])
+@limiter.exempt  # share/preview URL — crawlers poll it; must never be throttled
+def share_artwork(qid):
+    """Per-painting share URL with server-rendered Open Graph tags."""
+    if not QID_RE.match(qid):
+        return app.send_static_file("index.html")
+    cached = _share_cache.get(qid)
+    if cached:
+        resp = make_response(cached)
+        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+        return resp
+    try:
+        artwork, artist, _ = _dossier_or_facts(qid)
+        if not artwork:
+            return app.send_static_file("index.html")  # unknown id → plain app
+        doc = _render_share(qid, artwork, artist)
+        with _cache_lock:
+            _cache_set(_share_cache, qid, doc)
+        resp = make_response(doc)
+        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+        return resp
+    except Exception as e:
+        print(f"share_artwork error: {e}")
+        return app.send_static_file("index.html")
 
 
 @app.after_request

@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Meta History Book — Artwork of the Day</title>
     <meta
+      id="meta-desc"
       name="description"
       content="Art in history, and history in art. A daily painting by an artist born on this date — and the meta art history it opens into, drawn live from Wikidata."
     />
     <link rel="icon" type="image/jpeg" href="/static/8sprocket.jpg" />
-    <link rel="canonical" href="https://metahistorybook.com/" />
+    <link id="canonical" rel="canonical" href="https://metahistorybook.com/" />
     <meta name="theme-color" content="#122438" />
 
     <!-- Open Graph / Twitter — defaults; updated per artwork by the frontend so
@@ -23,7 +24,10 @@
       content="Art in history, and history in art. A daily painting by an artist born on this date — and the meta art history it opens into, drawn live from Wikidata."
     />
     <meta id="og-image" property="og:image" content="https://metahistorybook.com/static/8sprocket.jpg" />
-    <meta property="og:url" content="https://metahistorybook.com/" />
+    <meta id="og-image-alt" property="og:image:alt" content="Meta History Book" />
+    <meta id="og-image-w" property="og:image:width" content="" />
+    <meta id="og-image-h" property="og:image:height" content="" />
+    <meta id="og-url" property="og:url" content="https://metahistorybook.com/" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta id="tw-title" name="twitter:title" content="Meta History Book — Artwork of the Day" />
     <meta
@@ -763,6 +767,7 @@
         <div class="controls" id="controls">
           <button id="btn-back" class="ctrl-btn ghost" style="display: none">&larr; Back</button>
           <button id="btn-surprise" class="ctrl-btn" title="Jump to a random painting">🎲 Surprise me</button>
+          <button id="btn-share" class="ctrl-btn ghost" title="Copy a shareable link to this painting">🔗 Share</button>
           <label class="ctrl-date" title="Browse paintings for any calendar date">
             <span>📅 Date</span>
             <input type="date" id="date-pick" />
@@ -1600,6 +1605,21 @@
         if (surprise) surprise.addEventListener("click", surpriseMe);
         if (today) today.addEventListener("click", fetchArtwork);
 
+        // Share — copy a per-painting link (/a/<qid>); its preview shows the painting.
+        const share = document.getElementById("btn-share");
+        if (share)
+          share.addEventListener("click", async () => {
+            const cur = state.current;
+            if (!cur || !cur.artwork_id) return;
+            const url = `${location.origin}/a/${cur.artwork_id}`;
+            try {
+              await navigator.clipboard.writeText(url);
+              toast("Link copied — preview shows this painting.");
+            } catch (e) {
+              toast(url); // clipboard blocked — show the link to copy manually
+            }
+          });
+
         // Gallery (dark) mode — persisted across visits.
         const themeBtn = document.getElementById("btn-theme");
         const applyTheme = (on) => {
@@ -1634,7 +1654,10 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         wireControls();
-        fetchArtwork();
+        // A shared link (/a/<qid>) opens that painting directly; otherwise today's pick.
+        const shared = location.pathname.match(/^\/a\/(Q\d+)/);
+        if (shared) openExplore("artwork", shared[1], "the shared painting");
+        else fetchArtwork();
       });
     </script>
 
