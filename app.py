@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 
 import requests
-from flask import Flask, jsonify, make_response, request
+from flask import Flask, jsonify, make_response, redirect, request
 
 
 def _load_dotenv(path=".env"):
@@ -43,6 +43,7 @@ import article_writer  # noqa: E402  (imported after .env is loaded)
 import enrichment  # noqa: E402
 import iiif  # noqa: E402
 import linked_art  # noqa: E402
+import og_card  # noqa: E402
 import sparql_library  # noqa: E402
 import wikibase_rest  # noqa: E402
 
@@ -132,6 +133,7 @@ _date_cache: "OrderedDict[Any, Any]" = OrderedDict()  # galleries for a month/da
 _resolve_cache: "OrderedDict[Any, Any]" = OrderedDict()  # explore: QID -> displayable item
 _la_cache: "OrderedDict[Any, Any]" = OrderedDict()  # Linked Art records: (kind, qid) -> record
 _share_cache: "OrderedDict[Any, Any]" = OrderedDict()  # /a/<qid> -> server-rendered share HTML
+_ogimg_cache: "OrderedDict[Any, Any]" = OrderedDict()  # /og/<qid>.jpg -> branded card JPEG bytes
 
 
 def run_sparql(query, timeout=45):
@@ -1018,12 +1020,8 @@ def _render_share(qid, artwork, artist):
     first = next((p for s in summary.get("sections", []) for p in s.get("paragraphs", []) if p), "")
     desc = first.strip()[:300] or f"{headline} — explore the art history behind it."
 
-    raw = (artwork.get("image") or "").split("?")[0]
-    if raw:
-        image = f"{raw}?width=1200"  # a sensibly-sized Commons thumbnail for previews
-        _, w, h = iiif.image_info(artwork.get("image"))
-        og_w = min(1200, w) if w else 0
-        og_h = round(og_w * h / w) if (w and h) else 0
+    if artwork.get("image"):
+        image, og_w, og_h = f"{base}/og/{qid}.jpg", 1200, 630  # branded 1200×630 card
     else:
         image, og_w, og_h = f"{base}/static/8sprocket.jpg", 0, 0
     share_url = f"{base}/a/{qid}"
@@ -1078,6 +1076,54 @@ def share_artwork(qid):
         return app.send_static_file("index.html")
 
 
+def _byline(artwork, artist):
+    """'by Artist (1452–1519) · 1503' — degrading gracefully as data allows."""
+    name = (artist or {}).get("name") or "Unknown artist"
+    out = f"by {name}"
+    by = (artist or {}).get("_birthYear")
+    dm = re.search(r"\d{4}", (artist or {}).get("deathdate") or "")
+    span = f"{by or ''}–{dm.group(0) if dm else ''}".strip("–")
+    if span and span != "–":
+        out += f" ({span})"
+    date = artwork.get("creationDate")
+    if date and date != "Unknown":
+        out += f" · {date}"
+    return out
+
+
+@app.route("/og/<qid>.jpg", methods=["GET"])
+@limiter.exempt  # crawlers fetch this as og:image; never throttle
+def og_card_image(qid):
+    """A branded 1200×630 Open Graph card (painting + title + byline)."""
+    if not QID_RE.match(qid):
+        return redirect("/static/8sprocket.jpg")
+    cached = _ogimg_cache.get(qid)
+    if cached is not None:
+        resp = make_response(cached)
+        resp.headers["Content-Type"] = "image/jpeg"
+        return resp
+    try:
+        artwork, artist, _ = _dossier_or_facts(qid)
+        raw = (artwork.get("image") or "").split("?")[0] if artwork else ""
+        if not raw:
+            return redirect("/static/8sprocket.jpg")  # no painting → fall back to the logo
+        src = requests.get(f"{raw}?width=1000", headers=HEADERS, timeout=15)
+        src.raise_for_status()
+        jpg = og_card.render_card(
+            src.content,
+            title=artwork.get("title") or "Untitled",
+            subtitle=_byline(artwork, artist),
+        )
+        with _cache_lock:
+            _cache_set(_ogimg_cache, qid, jpg)
+        resp = make_response(jpg)
+        resp.headers["Content-Type"] = "image/jpeg"
+        return resp
+    except Exception as e:
+        print(f"og_card_image error: {e}")
+        return redirect("/static/8sprocket.jpg")
+
+
 @app.after_request
 def add_header(response):
     """Cache only static assets in the browser; keep HTML + live JSON fresh.
@@ -1087,7 +1133,8 @@ def add_header(response):
     Speed comes from the in-process caches (_day_cache/_details_cache/_article_cache),
     not the browser. Static files (the logo) are safe to cache for a day.
     """
-    if request.path.startswith("/static/"):
+    if request.path.startswith("/static/") or request.path.startswith("/og/"):
+        # Static assets and the deterministic OG cards are safe to cache for a day.
         response.headers["Cache-Control"] = "public, max-age=86400"
     else:
         response.headers["Cache-Control"] = "no-store"

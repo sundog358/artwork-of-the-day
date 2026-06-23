@@ -6,7 +6,10 @@ codes, content types, HAL + CORS headers, content negotiation, and error paths �
 with zero network. Complements test_integration.py (which covers the parsers).
 """
 
+import io
+
 import pytest
+from PIL import Image
 
 import app as APP
 import iiif
@@ -241,23 +244,46 @@ def test_iiif_404_without_image(client, monkeypatch):
 def test_share_route_renders_per_artwork_og_tags(client, monkeypatch):
     monkeypatch.setattr(SL, "creator_of", lambda q: "Q762")
     monkeypatch.setattr(SL, "build_dossier", lambda aw, ar: (dict(ARTWORK), dict(ARTIST)))
-    monkeypatch.setattr(iiif, "image_info", lambda url: ("https://upload/x.jpg", 1000, 1500))
     r = client.get("/a/Q12418")
     body = r.get_data(as_text=True)
     assert r.status_code == 200
     assert r.headers["Content-Type"].startswith("text/html")
     # title + og:title carry the painting + artist, server-side (crawler-visible)
     assert "<title>Mona Lisa — Leonardo da Vinci · Meta History Book</title>" in body
-    # og:image points at the painting (1200-wide Commons thumb), not the logo
-    assert 'property="og:image" content="https://commons.wikimedia.org' in body
-    assert "Mona%20Lisa.jpg?width=1200" in body
-    # canonical + og:url point at the share URL; dimensions filled
-    assert "/a/Q12418" in body
-    assert 'property="og:image:width" content="1000"' in body
-    assert 'property="og:image:height" content="1500"' in body
+    # og:image points at the branded 1200×630 card route, not the logo
+    assert "/og/Q12418.jpg" in body
+    assert "/a/Q12418" in body  # canonical + og:url
+    assert 'property="og:image:width" content="1200"' in body
+    assert 'property="og:image:height" content="630"' in body
 
 
 def test_share_route_bad_id_serves_plain_app(client):
     r = client.get("/a/not-a-qid")
     assert r.status_code == 200
     assert "Meta History Book" in r.get_data(as_text=True)  # the default SPA, no per-artwork OG
+
+
+def test_og_card_route_renders_1200x630_jpeg(client, monkeypatch):
+    monkeypatch.setattr(SL, "creator_of", lambda q: "Q762")
+    monkeypatch.setattr(SL, "build_dossier", lambda aw, ar: (dict(ARTWORK), dict(ARTIST)))
+    # feed the card a synthetic painting so no network is touched
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 600), (90, 80, 70)).save(buf, "JPEG")
+
+    class _Resp:
+        content = buf.getvalue()
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(APP.requests, "get", lambda *a, **k: _Resp())
+    r = client.get("/og/Q12418.jpg")
+    assert r.status_code == 200
+    assert r.headers["Content-Type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(r.data)).size == (1200, 630)
+
+
+def test_og_card_bad_id_redirects_to_logo(client):
+    r = client.get("/og/not-a-qid.jpg")
+    assert r.status_code in (301, 302)
+    assert "8sprocket" in r.headers.get("Location", "")

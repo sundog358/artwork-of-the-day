@@ -23,6 +23,7 @@ files = [
   "wikibase_rest.py",
   "wikidata_facts.py",
   "iiif.py",
+  "og_card.py",
   "linked_art.py",
   "article_writer.py",
   "sparql_library.py",

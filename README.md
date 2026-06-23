@@ -78,6 +78,10 @@ hard parts:
 - **Explore** — click any related work / artist / movement to load it; a date
   picker for any day; "🎲 Surprise me"; a Back stack.
 - **Gallery (dark) mode** — paintings on a museum wall, persisted across visits.
+- **Social link previews** — every painting has a share URL (`/a/<QID>`) with
+  **server-rendered Open Graph tags** and a branded **1200×630 card** generated on
+  the fly (`/og/<QID>.jpg`), so a shared link previews the actual artwork on
+  Facebook, LinkedIn, Slack, iMessage and X — not a generic logo.
 - **Deep-zoom viewer** — click the painting for a full-resolution
   [IIIF](https://iiif.io) + OpenSeadragon lightbox; every artwork also serves a
   IIIF Presentation 3.0 manifest at `/iiif/<QID>/manifest.json`.
