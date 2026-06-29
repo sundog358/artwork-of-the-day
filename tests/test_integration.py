@@ -9,6 +9,7 @@ so they're deterministic and fast.
 import responses
 
 import app as APP
+import enrichment as E
 import iiif as IIIF
 import linked_art as LA
 import sparql_library as S
@@ -376,3 +377,112 @@ def test_artwork_context_groups_by_relation():
     ctx = S.artwork_context("Q1")
     assert ctx["movements"] == ["Italian Renaissance"]
     assert ctx["events"] == ["theft"]
+
+
+def test_enrichment_build_degrades_when_one_parallel_task_fails(monkeypatch):
+    """A failed enrichment layer should drop that section, not the whole article."""
+    artwork = {
+        "title": "Mona Lisa",
+        "creationDate": "1503",
+        "creationDateRaw": "1503-01-01T00:00:00Z",
+        "genreQid": "Q134307",
+        "location": "Louvre",
+        "locationQid": "Q19675",
+        "depicts": [{"qid": "Q762", "label": "Lisa del Giocondo"}],
+    }
+    artist = {
+        "name": "Leonardo da Vinci",
+        "birthdate": "1452",
+        "birthPlaceQid": "Q83233",
+        "wikipedia": "https://en.wikipedia.org/wiki/Leonardo_da_Vinci",
+    }
+
+    monkeypatch.setattr(
+        S,
+        "artist_traditions",
+        lambda q: {
+            "teachers": [],
+            "education": [],
+            "genres": [{"qid": "Q134307", "label": "portrait", "description": "genre of art"}],
+            "movements": [],
+            "nationality": [],
+        },
+    )
+    monkeypatch.setattr(S, "wikipedia_sitelink", lambda qid: "Mona_Lisa")
+    monkeypatch.setattr(
+        E,
+        "wikipedia_summary",
+        lambda title: (
+            {
+                "title": title,
+                "extract": f"{title} summary.",
+                "url": f"https://en.wikipedia.org/wiki/{title}",
+            }
+            if title
+            else None
+        ),
+    )
+    monkeypatch.setattr(E, "_context_wikipedia", lambda qids: [])
+    monkeypatch.setattr(WR, "dated_facts", lambda qid, pid: [])
+    monkeypatch.setattr(WR, "reference_sources", lambda qid, limit=5: ["VIAF"])
+    monkeypatch.setattr(S, "notable_artworks_by", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        S,
+        "expand_entities",
+        lambda qids: {
+            "Q762": {"label": "Lisa del Giocondo", "description": "Florentine noblewoman"},
+            "Q19675": {"label": "Louvre", "description": "art museum"},
+        },
+    )
+    monkeypatch.setattr(
+        S,
+        "enrich_entities",
+        lambda qids: {
+            "Q134307": {"label": "portrait", "description": "genre of art"},
+            "Q83233": {"label": "Vinci", "description": "town in Tuscany"},
+        },
+    )
+    monkeypatch.setattr(
+        WF,
+        "statements_for",
+        lambda qids: {
+            "Q12418": [
+                {
+                    "pid": "P186",
+                    "prop": "made from material",
+                    "value": "oil paint",
+                    "vqid": "Q296955",
+                }
+            ],
+            "Q762": [],
+            "Q19675": [],
+        },
+    )
+
+    def broken_artist_works(*args, **kwargs):
+        raise RuntimeError("artist works query failed")
+
+    monkeypatch.setattr(S, "artist_works", broken_artist_works)
+    monkeypatch.setattr(S, "artist_collections", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        S, "artist_work_stats", lambda qid: {"count": "4", "first": "1503", "last": "1519"}
+    )
+    monkeypatch.setattr(
+        S, "artist_relations", lambda qid: {"spouse": [], "students": [], "influenced": []}
+    )
+    monkeypatch.setattr(S, "artist_identifiers", lambda qid: {"viaf": "24604287"})
+    monkeypatch.setattr(
+        S, "artwork_context", lambda qid: {"movements": [], "events": [], "exhibitions": []}
+    )
+    monkeypatch.setattr(S, "notable_by_property", lambda *args, **kwargs: [])
+    monkeypatch.setattr(S, "genre_peers", lambda *args, **kwargs: [])
+
+    out = E.build("Q12418", "Q762", artwork, artist)
+    headings = [section["heading"] for section in out["sections"]]
+
+    assert "About the painting" in headings
+    assert "The work in detail" in headings
+    assert "Other works by the artist" not in headings
+    assert out["provenance"] == ["VIAF"]
+    assert out["sources"][0]["label"] == "Wikipedia: Mona_Lisa"
+    assert out["links"] == [{"label": "VIAF", "url": "https://viaf.org/viaf/24604287"}]

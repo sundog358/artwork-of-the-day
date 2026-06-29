@@ -46,10 +46,24 @@ manifests, so the output is interoperable open data rather than a silo.
 
 **The outcome.** A live, deployed product
 ([metahistorybook.com](https://metahistorybook.com)) that doubles as a reusable
-narration engine — green CI (ruff · mypy across the codebase · 57 tests),
+narration engine — green CI (ruff · mypy across the codebase · 69 tests),
 accessibility, SEO, Docker, an IIIF deep-zoom viewer, and records validated
 against the official Linked Art JSON Schemas. The thesis in one line: **cited,
 deterministic and standards-compliant beats generated.**
+
+## Reviewer quick scan
+
+If you're evaluating this as a portfolio project, the strongest signals are:
+
+- **Trustworthy by construction** — no LLM layer; prose is assembled from
+  Wikidata statements and attributed Wikipedia summaries.
+- **Real product surface** — live deployment, shareable artwork URLs, social
+  preview cards, deep zoom, keyboard navigation, accessibility states, and
+  user-facing attribution.
+- **Interoperable data engineering** — the same artwork is also served as IIIF
+  Presentation 3.0 and Linked Art / CIDOC-CRM JSON-LD.
+- **Reviewable quality bar** — deterministic mocked tests, route coverage,
+  parser coverage, lint, format, and type checks all run in CI.
 
 ## Why it's interesting
 
@@ -163,19 +177,23 @@ size) are in [.env.example](.env.example).
 ## Quality
 
 ```bash
-pytest -q          # 35 unit + integration tests (HTTP mocked)
+pytest -q          # 69 deterministic tests (HTTP mocked where needed)
 ruff check .       # lint
 ruff format .      # format
 mypy               # type-check the typed core modules
+python validate_linked_art.py  # live Linked Art schema validation
 ```
 
 A fast, no-network suite covers the deterministic core (the property narrator,
-qualifier/date parsing, article assembly) and the **network-facing parsers**
-(Wikibase REST + SPARQL bindings, with HTTP mocked) — the parser modules sit at
-~88% coverage. CI runs **lint, format-check, type-check, and tests** on every
-push. The frontend adds **accessibility** (descriptive alt text, visible focus,
-ARIA state) and **SEO** (per-artwork Open Graph / Twitter tags + a
+qualifier/date parsing, article assembly), the **network-facing parsers**
+(Wikibase REST + SPARQL bindings, with HTTP mocked), and route-level behavior
+through Flask's test client. CI runs **lint, format-check, type-check, and tests**
+on every push. The frontend adds **accessibility** (descriptive alt text, visible
+focus, ARIA state) and **SEO** (per-artwork Open Graph / Twitter tags + a
 `schema.org/VisualArtwork` block, so a shared link previews the actual painting).
+For release checks, `validate_linked_art.py` builds live sample records and
+validates all seven Linked Art record types against the vendored official JSON
+Schemas.
 
 ## Deploy
 

@@ -25,9 +25,11 @@ def client():
         APP._la_cache,
         APP._details_cache,
         APP._article_cache,
+        APP._enrichment_cache,
         APP._resolve_cache,
         APP._date_cache,
         APP._share_cache,
+        APP._ogimg_cache,
     ):
         c.clear()
     APP._day_cache["date"] = None
@@ -91,6 +93,13 @@ def test_home_serves_spa(client):
     assert b"Artwork of the Day" in r.data
 
 
+def test_legal_serves_attribution_page(client):
+    r = client.get("/legal")
+    assert r.status_code == 200
+    assert r.headers["Content-Type"].startswith("text/html")
+    assert b"Wikidata" in r.data
+
+
 # --- gallery / explore ------------------------------------------------------ #
 def test_artwork_of_the_day_builds_gallery(client, monkeypatch):
     monkeypatch.setattr(
@@ -135,6 +144,37 @@ def test_resolve_artist_returns_item(client, monkeypatch):
     assert r.get_json()["item"]["creator_id"] == "Q762"
 
 
+def test_surprise_returns_random_displayable_item(client, monkeypatch):
+    monkeypatch.setattr(
+        APP,
+        "get_random_paintings",
+        lambda rng: [
+            {"artwork_id": "", "creator_id": "Q1", "image": "http://x/skip.jpg"},
+            {
+                "artwork_id": "Q12418",
+                "creator_id": "Q762",
+                "image": "http://commons.wikimedia.org/wiki/Special:FilePath/Mona.jpg",
+            },
+        ],
+    )
+    monkeypatch.setattr(APP.random.Random, "choice", lambda self, items: items[0])
+
+    r = client.get("/surprise")
+    body = r.get_json()
+    assert r.status_code == 200
+    assert body["status"] == "success"
+    assert body["item"]["artwork_id"] == "Q12418"
+    assert body["item"]["image"].startswith("https://")
+
+
+def test_surprise_404_when_random_batches_are_empty(client, monkeypatch):
+    monkeypatch.setattr(APP, "get_random_paintings", lambda rng: [])
+
+    r = client.get("/surprise")
+    assert r.status_code == 404
+    assert r.get_json()["status"] == "error"
+
+
 # --- details / article ------------------------------------------------------ #
 def test_artwork_details_validates_ids(client):
     assert client.get("/artwork-details?artwork=Q1&artist=bad").status_code == 400
@@ -156,6 +196,50 @@ def test_artwork_article_is_deterministic_sections(client, monkeypatch):
     assert r.status_code == 200
     assert article["mode"] == "wikidata"  # never an LLM
     assert any(s.get("paragraphs") for s in article["sections"])
+
+
+def test_artwork_enrichment_returns_progressive_payload_and_uses_cache(client, monkeypatch):
+    calls = {"details": 0, "build": 0}
+
+    def fake_details(artwork_id, artist_id):
+        calls["details"] += 1
+        return dict(ARTWORK), dict(ARTIST)
+
+    def fake_build(artwork_id, artist_id, artwork, artist):
+        calls["build"] += 1
+        return {
+            "sections": [{"heading": "About the painting", "paragraphs": ["A grounded note."]}],
+            "sources": [{"label": "Wikipedia: Mona Lisa", "url": "https://en.wikipedia.org/"}],
+            "entities": [{"label": "Louvre", "qid": "Q19675", "open": "place"}],
+            "links": [],
+            "provenance": ["VIAF"],
+        }
+
+    monkeypatch.setattr(APP, "gather_details", fake_details)
+    monkeypatch.setattr(APP.enrichment, "build", fake_build)
+
+    first = client.get("/artwork-enrichment?artwork=Q12418&artist=Q762")
+    second = client.get("/artwork-enrichment?artwork=Q12418&artist=Q762")
+
+    assert first.status_code == second.status_code == 200
+    payload = first.get_json()["enrichment"]
+    assert payload["sections"][0]["heading"] == "About the painting"
+    assert payload["sources"][0]["label"].startswith("Wikipedia")
+    assert payload["provenance"] == ["VIAF"]
+    assert calls == {"details": 1, "build": 1}
+
+
+def test_artwork_enrichment_timeout_is_504(client, monkeypatch):
+    monkeypatch.setattr(APP, "gather_details", lambda aw, ar: (dict(ARTWORK), dict(ARTIST)))
+
+    def timeout(*args, **kwargs):
+        raise APP.requests.exceptions.Timeout()
+
+    monkeypatch.setattr(APP.enrichment, "build", timeout)
+
+    r = client.get("/artwork-enrichment?artwork=Q12418&artist=Q762")
+    assert r.status_code == 504
+    assert "too long" in r.get_json()["message"]
 
 
 # --- Linked Art -------------------------------------------------------------- #
@@ -217,6 +301,35 @@ def test_place_and_group_and_concept_and_set(client, monkeypatch):
     assert client.get("/concept/Q134307").get_json()["type"] == "Type"
     s = client.get("/set/Q19675").get_json()
     assert s["type"] == "Set" and "Collection of Louvre" in s["_label"]
+
+
+def test_visual_record_models_depicted_subjects(client, monkeypatch):
+    monkeypatch.setattr(SL, "artwork_facts", lambda q: dict(ARTWORK))
+    monkeypatch.setattr(
+        SL,
+        "related",
+        lambda specs: {"depicts": [{"qid": "Q12418", "label": "Mona Lisa"}]},
+    )
+    monkeypatch.setattr(SL, "classify_entities", lambda qids: {"Q12418": "VisualItem"})
+
+    r = client.get("/visual/Q12418")
+    body = r.get_json()
+    assert r.status_code == 200
+    _assert_la_headers(r)
+    assert body["type"] == "VisualItem"
+    assert body["represents"][0] == {
+        "id": "http://www.wikidata.org/entity/Q12418",
+        "type": "VisualItem",
+        "_label": "Mona Lisa",
+    }
+
+
+def test_visual_record_404_when_absent(client, monkeypatch):
+    monkeypatch.setattr(SL, "artwork_facts", lambda q: {})
+
+    r = client.get("/visual/Q999999")
+    assert r.status_code == 404
+    _assert_la_headers(r)
 
 
 # --- IIIF -------------------------------------------------------------------- #

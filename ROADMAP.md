@@ -6,6 +6,8 @@
 
 Status keys: ✅ shipped · 🔨 in progress · 🔭 planned · 💡 idea.
 
+Last audited against the codebase: **June 29, 2026**.
+
 ## Guiding principles
 
 These shape every item below — a feature that violates one isn't on the roadmap.
@@ -32,7 +34,8 @@ The foundation is complete and live at **[metahistorybook.com](https://metahisto
 - ✅ **Generic, schema-agnostic Wikidata narrator** — property→template registry
   with a safe fallback ([wikidata_facts.py](wikidata_facts.py))
 - ✅ **Multi-hop, notability-ranked enrichment** — academic lineage, peers,
-  collections, depicted subjects, dated history, provenance ([enrichment.py](enrichment.py))
+  collections, depicted subjects, dated history, provenance labels, and
+  attributed Wikipedia context ([enrichment.py](enrichment.py))
 - ✅ **Hybrid two-API design** — SPARQL ([sparql_library.py](sparql_library.py)) +
   Wikibase REST for qualifier spans & references ([wikibase_rest.py](wikibase_rest.py))
 - ✅ **Parallelized** enrichment (~3× faster); per-artwork caching
@@ -101,13 +104,16 @@ Each is self-contained and screenshot-friendly.
 
 ## 🔭 Engineering & quality
 
-- ✅ **Route-level test coverage** — a Flask test-client suite exercising every
-  route (assembly, headers, content negotiation, error paths) with the data layer
-  mocked ([tests/test_routes.py](tests/test_routes.py)); 57 tests total.
-- ✅ **Codebase-wide typing** — `mypy` now type-checks all 8 first-party modules
-  (`app`, `sparql_library`, `enrichment`, `linked_art`, `iiif`, …), not just a few.
-- 💡 **End-to-end enrichment test** — exercise the full parallel enrichment build
-  against mocked HTTP, asserting graceful degradation when a query fails.
+- ✅ **Route-level test coverage** — a Flask test-client suite exercising the
+  core user-facing and API route families (assembly, headers, content
+  negotiation, error paths) with the data layer mocked
+  ([tests/test_routes.py](tests/test_routes.py)); 69 tests total.
+- ✅ **Codebase-wide typing** — `mypy` now type-checks all 9 configured
+  first-party modules (`app`, `sparql_library`, `enrichment`, `linked_art`,
+  `iiif`, …), not just a few.
+- ✅ **End-to-end enrichment degradation test** — exercises the full parallel
+  enrichment build against mocked HTTP and asserts one failed layer drops only
+  that section, not the whole article.
 - 💡 **Multi-instance ready** — Redis-backed rate-limit storage and shared cache
   (the code already reads `AOTD_RATELIMIT_STORAGE`).
 - 💡 **Observability** — structured logging and basic error tracking in place of
