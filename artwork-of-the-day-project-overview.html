@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A concise technical overview of Artwork of the Day: a deterministic Flask and Wikidata art-history explorer with Linked Art JSON-LD, IIIF manifests, route tests, CI, and deployment notes."
+    />
+    <meta
+      name="keywords"
+      content="Artwork of the Day, Meta History Book, Wikidata, Linked Art, IIIF, Flask, cultural heritage, open data, project architecture"
+    />
+    <meta name="author" content="Artwork of the Day project" />
+    <title>Artwork of the Day - Project Overview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1117;
+        --bg-soft: #121823;
+        --panel: #161d29;
+        --panel-2: #1b2432;
+        --line: rgba(232, 238, 247, 0.14);
+        --line-strong: rgba(232, 238, 247, 0.24);
+        --text: #eef4ff;
+        --muted: #aeb9c8;
+        --quiet: #7f8c9d;
+        --gold: #e8bc5b;
+        --cyan: #73d2de;
+        --green: #8ed081;
+        --rose: #f58ca1;
+        --violet: #b8a0ff;
+        --orange: #f4a261;
+        --shadow: 0 28px 90px rgba(0, 0, 0, 0.36);
+        --radius: 8px;
+        --max: 1180px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(circle at top left, rgba(115, 210, 222, 0.14), transparent 32rem),
+          linear-gradient(180deg, #0d1117 0%, #101722 48%, #0d1117 100%);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--cyan);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .wrap {
+        width: min(100% - 32px, var(--max));
+        margin: 0 auto;
+      }
+
+      .site-header {
+        padding: 24px 0 18px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(13, 17, 23, 0.86);
+        backdrop-filter: blur(14px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .mark {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .mark-badge {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, rgba(232, 188, 91, 0.22), rgba(115, 210, 222, 0.15));
+        color: var(--gold);
+        font: 700 1rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .mark strong {
+        display: block;
+        font-size: 0.98rem;
+        letter-spacing: 0;
+      }
+
+      .mark span {
+        display: block;
+        color: var(--quiet);
+        font-size: 0.82rem;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .nav-links a,
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+
+      main {
+        padding-bottom: 42px;
+      }
+
+      .hero {
+        padding: 72px 0 44px;
+      }
+
+      .eyebrow {
+        color: var(--gold);
+        font: 700 0.78rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin-top: 14px;
+        font-size: clamp(2.5rem, 7vw, 5.6rem);
+      }
+
+      h2 {
+        font-size: clamp(1.7rem, 4vw, 2.7rem);
+      }
+
+      h3 {
+        font-size: 1.02rem;
+      }
+
+      .tagline {
+        margin: 18px 0 0;
+        max-width: 850px;
+        color: var(--muted);
+        font-size: clamp(1.08rem, 2vw, 1.35rem);
+      }
+
+      .lead {
+        margin: 22px 0 0;
+        max-width: 860px;
+        color: #d7e1ee;
+        font-size: 1rem;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        color: var(--text);
+        background: linear-gradient(135deg, rgba(115, 210, 222, 0.18), rgba(232, 188, 91, 0.12));
+        font-weight: 700;
+      }
+
+      .button.secondary {
+        background: rgba(255, 255, 255, 0.035);
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 34px;
+      }
+
+      .stat {
+        min-height: 104px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+      }
+
+      .stat b {
+        display: block;
+        font-size: 2rem;
+        line-height: 1;
+        color: var(--text);
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      section {
+        padding: 44px 0;
+      }
+
+      .section-head {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+
+      .section-head p {
+        margin: 0;
+        max-width: 820px;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: 1fr;
+      }
+
+      .grid.three {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+          var(--panel);
+        box-shadow: var(--shadow);
+        padding: 20px;
+      }
+
+      .card p {
+        margin: 10px 0 0;
+        color: var(--muted);
+      }
+
+      .callout {
+        margin-top: 14px;
+        padding: 16px 18px;
+        border: 1px solid rgba(232, 188, 91, 0.35);
+        border-radius: var(--radius);
+        background: rgba(232, 188, 91, 0.08);
+        color: #f4dfad;
+      }
+
+      .mono,
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      }
+
+      code {
+        color: #d9ecff;
+      }
+
+      .diagram {
+        overflow: hidden;
+        padding: 0;
+      }
+
+      figure {
+        margin: 0;
+      }
+
+      figcaption {
+        padding: 12px 18px 18px;
+        color: var(--quiet);
+        font-size: 0.86rem;
+      }
+
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.025);
+      }
+
+      table {
+        width: 100%;
+        min-width: 700px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.045);
+        font-size: 0.78rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      td {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      td strong {
+        color: var(--text);
+      }
+
+      .sev {
+        display: inline-flex;
+        min-width: 54px;
+        justify-content: center;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font: 700 0.72rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .sev.high {
+        color: #ffd2da;
+        border-color: rgba(245, 140, 161, 0.55);
+        background: rgba(245, 140, 161, 0.12);
+      }
+
+      .sev.med {
+        color: #ffe1b7;
+        border-color: rgba(244, 162, 97, 0.55);
+        background: rgba(244, 162, 97, 0.12);
+      }
+
+      .sev.low {
+        color: #c6f0bd;
+        border-color: rgba(142, 208, 129, 0.5);
+        background: rgba(142, 208, 129, 0.11);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .commands {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #0a0f16;
+        color: #dce8f5;
+        font-size: 0.86rem;
+      }
+
+      .footer {
+        padding: 30px 0 44px;
+        border-top: 1px solid var(--line);
+        color: var(--quiet);
+      }
+
+      .footer-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .source-note {
+        font-size: 0.88rem;
+      }
+
+      @media (min-width: 680px) {
+        .stats {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .grid.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .grid.three {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (min-width: 960px) {
+        .hero {
+          padding-top: 86px;
+        }
+
+        .stats {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
+        .section-head {
+          grid-template-columns: minmax(260px, 0.9fr) minmax(400px, 1.2fr);
+          align-items: end;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .site-header {
+          position: static;
+        }
+
+        .nav {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .nav-links {
+          justify-content: flex-start;
+        }
+
+        section {
+          padding: 34px 0;
+        }
+
+        .hero {
+          padding: 52px 0 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="wrap nav" aria-label="Page navigation">
+        <div class="mark">
+          <div class="mark-badge" aria-hidden="true">A</div>
+          <div>
+            <strong>Artwork of the Day</strong>
+            <span>essence · architecture · discipline · evaluation</span>
+          </div>
+        </div>
+        <div class="nav-links">
+          <a href="#architecture">Architecture</a>
+          <a href="#components">Components</a>
+          <a href="#quality">Quality</a>
+          <a href="#evaluation">Evaluation</a>
+          <a href="#usage">Usage</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <p class="eyebrow">Meta History Book · Open cultural data</p>
+          <h1 id="hero-title">Artwork of the Day turns Wikidata into a daily, cited art-history experience.</h1>
+          <p class="tagline">
+            A deterministic Flask application that selects artworks by artist birthday, enriches them from open
+            knowledge graphs, and republishes the result as human-readable pages plus Linked Art and IIIF records.
+          </p>
+          <p class="lead">
+            The project's core bet is trust over generated fluency: the prose layer is assembled from Wikidata
+            statements and attributed Wikipedia summaries, while the same dossier powers social previews,
+            deep-zoom manifests, and dereferenceable cultural-heritage JSON-LD.
+          </p>
+          <div class="hero-actions" aria-label="Project links">
+            <a class="button" href="https://metahistorybook.com">Live site</a>
+            <a class="button secondary" href="README.md">README</a>
+            <a class="button secondary" href="ROADMAP.md">Roadmap</a>
+          </div>
+          <div class="stats" aria-label="Repository snapshot">
+            <div class="stat"><b>20</b><span>Flask route declarations in <code>app.py</code></span></div>
+            <div class="stat"><b>7</b><span>Linked Art record types exposed as JSON-LD</span></div>
+            <div class="stat"><b>69</b><span>pytest tests covering logic, parsers, and routes</span></div>
+            <div class="stat"><b>11</b><span>first-party Python modules at repo root</span></div>
+            <div class="stat"><b>0</b><span>required secrets or paid model dependencies</span></div>
+            <div class="stat"><b>3</b><span>deployment paths documented: Render, Cloud Run, Railway/Fly</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="why" aria-labelledby="why-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Why This Is Worthwhile</p>
+              <h2 id="why-title">A reading surface for a graph that was not built to be read.</h2>
+            </div>
+            <p>
+              Wikidata is excellent at structured art facts, but it is not a finished interpretive experience.
+              This repository bridges that gap without handing factual authority to a language model.
+            </p>
+          </div>
+          <div class="grid two">
+            <article class="card">
+              <h3>Thesis</h3>
+              <p>
+                The app treats open linked data as the source of record, then layers deterministic narration,
+                notability-ranked traversal, and standards-based publication on top. It is less a gallery
+                scraper than a small cultural-heritage data product.
+              </p>
+            </article>
+            <article class="card">
+              <h3>What That Buys You</h3>
+              <p>
+                The architecture gives users explainable text, source attribution, shareable artwork pages,
+                IIIF-compatible image viewing, and machine-readable records. Running cost stays low because
+                there is no LLM, vector database, account system, or private API key in the runtime path.
+              </p>
+            </article>
+          </div>
+          <div class="callout">
+            <strong>Essence:</strong> cited, deterministic, standards-aware art history from open knowledge graphs.
+          </div>
+        </div>
+      </section>
+
+      <section id="architecture" aria-labelledby="architecture-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Architecture At A Glance</p>
+              <h2 id="architecture-title">A server-rendered API core with a vanilla browser shell.</h2>
+            </div>
+            <p>
+              The Flask app owns routing, rate limiting, caching, social previews, Linked Art, and IIIF.
+              The browser shell progressively loads a daily gallery, base article, and deeper enrichment while
+              retaining a no-build frontend posture.
+            </p>
+          </div>
+
+          <figure class="card diagram" role="group" aria-labelledby="arch-caption">
+            <svg viewBox="0 0 1100 560" role="img" aria-labelledby="arch-title arch-desc">
+              <title id="arch-title">Artwork of the Day architecture diagram</title>
+              <desc id="arch-desc">
+                Browser UI calls Flask routes, which fan out to SPARQL, Wikibase REST, Wikipedia REST, Commons,
+                local caches, Linked Art serializers, IIIF manifests, and Open Graph card generation.
+              </desc>
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#73d2de"></path>
+                </marker>
+                <linearGradient id="box" x1="0" x2="1">
+                  <stop stop-color="#1e2a3a"></stop>
+                  <stop offset="1" stop-color="#142030"></stop>
+                </linearGradient>
+              </defs>
+              <rect width="1100" height="560" fill="#0a0f16"></rect>
+              <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15">
+                <rect x="40" y="80" width="190" height="120" rx="8" fill="url(#box)" stroke="#334154"></rect>
+                <text x="68" y="118" fill="#eef4ff" font-weight="700">Browser UI</text>
+                <text x="68" y="148" fill="#aeb9c8">static/index.html</text>
+                <text x="68" y="174" fill="#aeb9c8">vanilla JS SPA</text>
+
+                <rect x="310" y="70" width="220" height="140" rx="8" fill="url(#box)" stroke="#334154"></rect>
+                <text x="338" y="108" fill="#eef4ff" font-weight="700">Flask app.py</text>
+                <text x="338" y="138" fill="#aeb9c8">routes · rate limits</text>
+                <text x="338" y="164" fill="#aeb9c8">bounded process caches</text>
+                <text x="338" y="190" fill="#aeb9c8">share pages · OG cards</text>
+
+                <rect x="610" y="35" width="210" height="110" rx="8" fill="url(#box)" stroke="#334154"></rect>
+                <text x="638" y="73" fill="#eef4ff" font-weight="700">SPARQL library</text>
+                <text x="638" y="103" fill="#aeb9c8">graph queries</text>
+                <text x="638" y="127" fill="#aeb9c8">ranking · traversal</text>
+
+                <rect x="855" y="35" width="205" height="110" rx="8" fill="#102333" stroke="#2d5964"></rect>
+                <text x="882" y="73" fill="#eef4ff" font-weight="700">Wikidata WDQS</text>
+                <text x="882" y="103" fill="#aeb9c8">paintings · artists</text>
+                <text x="882" y="127" fill="#aeb9c8">relationships</text>
+
+                <rect x="610" y="185" width="210" height="110" rx="8" fill="url(#box)" stroke="#334154"></rect>
+                <text x="638" y="223" fill="#eef4ff" font-weight="700">Enrichment</text>
+                <text x="638" y="253" fill="#aeb9c8">5-worker fan-out</text>
+                <text x="638" y="277" fill="#aeb9c8">graceful degradation</text>
+
+                <rect x="855" y="185" width="205" height="110" rx="8" fill="#221d30" stroke="#514168"></rect>
+                <text x="882" y="223" fill="#eef4ff" font-weight="700">REST APIs</text>
+                <text x="882" y="253" fill="#aeb9c8">Wikibase qualifiers</text>
+                <text x="882" y="277" fill="#aeb9c8">Wikipedia summaries</text>
+
+                <rect x="310" y="305" width="220" height="125" rx="8" fill="url(#box)" stroke="#334154"></rect>
+                <text x="338" y="343" fill="#eef4ff" font-weight="700">Publication Layer</text>
+                <text x="338" y="373" fill="#aeb9c8">Linked Art JSON-LD</text>
+                <text x="338" y="397" fill="#aeb9c8">IIIF manifests</text>
+                <text x="338" y="421" fill="#aeb9c8">HAL + CORS</text>
+
+                <rect x="610" y="335" width="210" height="95" rx="8" fill="#1e2d1d" stroke="#476347"></rect>
+                <text x="638" y="373" fill="#eef4ff" font-weight="700">Commons</text>
+                <text x="638" y="403" fill="#aeb9c8">image info · files</text>
+
+                <rect x="40" y="330" width="190" height="100" rx="8" fill="#2a2117" stroke="#60451d"></rect>
+                <text x="68" y="368" fill="#eef4ff" font-weight="700">Consumers</text>
+                <text x="68" y="398" fill="#aeb9c8">people · crawlers</text>
+                <text x="68" y="422" fill="#aeb9c8">LOD / IIIF clients</text>
+
+                <line x1="230" y1="140" x2="310" y2="140" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="530" y1="120" x2="610" y2="90" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="820" y1="90" x2="855" y2="90" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="530" y1="165" x2="610" y2="235" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="820" y1="240" x2="855" y2="240" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="420" y1="210" x2="420" y2="305" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="530" y1="382" x2="610" y2="382" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+                <line x1="310" y1="382" x2="230" y2="382" stroke="#73d2de" stroke-width="2" marker-end="url(#arrow)"></line>
+              </g>
+            </svg>
+            <figcaption id="arch-caption">
+              Conceptual runtime flow based on <code>app.py</code>, <code>sparql_library.py</code>,
+              <code>enrichment.py</code>, <code>wikibase_rest.py</code>, <code>linked_art.py</code>, and <code>iiif.py</code>.
+            </figcaption>
+          </figure>
+
+          <div class="table-wrap" style="margin-top: 14px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th>Technology</th>
+                  <th>Responsibility</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Experience</strong></td>
+                  <td>HTML, CSS, vanilla JavaScript, Bootstrap/Bootswatch assets, OpenSeadragon on demand</td>
+                  <td>Daily gallery, artwork detail panel, date picker, explore links, share action, gallery mode, and deep-zoom lightbox.</td>
+                </tr>
+                <tr>
+                  <td><strong>Application API</strong></td>
+                  <td>Flask 3.1, Flask-Limiter, ProxyFix, Waitress</td>
+                  <td>JSON routes, static pages, rate limiting, health checks, canonical share pages, and per-artwork Open Graph image generation.</td>
+                </tr>
+                <tr>
+                  <td><strong>Graph access</strong></td>
+                  <td>Wikidata Query Service SPARQL</td>
+                  <td>Birthday artwork selection, entity dossiers, related works, movements, collections, people, and notability ranking.</td>
+                </tr>
+                <tr>
+                  <td><strong>Qualifier and source access</strong></td>
+                  <td>Wikibase REST API and Wikipedia REST summaries</td>
+                  <td>Statement qualifiers, date spans, cited sources, and attributed contextual summaries.</td>
+                </tr>
+                <tr>
+                  <td><strong>Interoperability</strong></td>
+                  <td>Linked Art 1.0 JSON-LD, HAL links, CORS, IIIF Presentation 3.0</td>
+                  <td>Machine-readable cultural-heritage records and image manifests for external clients and viewers.</td>
+                </tr>
+                <tr>
+                  <td><strong>Deployment</strong></td>
+                  <td>Dockerfile.web, Render blueprint, Procfile, Cloud Run notes</td>
+                  <td>Containerized WSGI runtime with optional env vars and no required secrets.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="components" aria-labelledby="components-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Core Components</p>
+              <h2 id="components-title">Small modules with clear cultural-data jobs.</h2>
+            </div>
+            <p>
+              The repo is organized around a Flask route layer, a SPARQL data layer, deterministic prose builders,
+              and publication serializers. There are no background workers or queues in the current codebase.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type / Role</th>
+                  <th>Responsibility</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>app.py</strong></td>
+                  <td>Flask application</td>
+                  <td>Owns HTTP routes, in-process caches, rate limiting, share pages, JSON endpoints, Linked Art and IIIF delivery, and cache headers.</td>
+                </tr>
+                <tr>
+                  <td><strong>static/index.html</strong></td>
+                  <td>Browser shell</td>
+                  <td>Loads the daily gallery, resolves explore clicks, fetches progressive article sections, manages theme persistence, and opens IIIF deep zoom.</td>
+                </tr>
+                <tr>
+                  <td><strong>sparql_library.py</strong></td>
+                  <td>Graph query library</td>
+                  <td>Builds artwork/artist dossiers and discovers related entities, works, movements, collections, identifiers, and notability-ranked peers.</td>
+                </tr>
+                <tr>
+                  <td><strong>article_writer.py</strong></td>
+                  <td>Base article builder</td>
+                  <td>Produces the immediate deterministic article sections from a known artwork and artist dossier.</td>
+                </tr>
+                <tr>
+                  <td><strong>enrichment.py</strong></td>
+                  <td>Parallel orchestrator</td>
+                  <td>Fans out across SPARQL, Wikibase REST, and Wikipedia summary calls; drops failed optional layers without failing the whole article.</td>
+                </tr>
+                <tr>
+                  <td><strong>wikidata_facts.py</strong></td>
+                  <td>Statement narrator</td>
+                  <td>Turns selected Wikidata properties into concise fact sentences through a curated template registry and safe fallback behavior.</td>
+                </tr>
+                <tr>
+                  <td><strong>wikibase_rest.py</strong></td>
+                  <td>REST client</td>
+                  <td>Reads statement qualifiers, date spans, labels, and reference sources from the Wikibase REST API to reduce pressure on WDQS.</td>
+                </tr>
+                <tr>
+                  <td><strong>linked_art.py</strong></td>
+                  <td>JSON-LD serializer</td>
+                  <td>Maps dossiers to object, visual, person, place, group, concept, and set records with authority equivalents where available.</td>
+                </tr>
+                <tr>
+                  <td><strong>iiif.py</strong></td>
+                  <td>Manifest builder</td>
+                  <td>Uses Commons image metadata to emit IIIF Presentation 3.0 manifests suitable for deep-zoom viewers.</td>
+                </tr>
+                <tr>
+                  <td><strong>og_card.py</strong></td>
+                  <td>Image renderer</td>
+                  <td>Generates branded 1200 x 630 JPEG preview cards for per-artwork social sharing routes.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="quality" aria-labelledby="quality-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Engineering Discipline</p>
+              <h2 id="quality-title">A pragmatic quality gate around deterministic data behavior.</h2>
+            </div>
+            <p>
+              CI installs pinned dependencies, runs Ruff linting and format checks, type-checks configured modules
+              with mypy, import-smoke-tests the app, and runs pytest with coverage over the core Python modules.
+            </p>
+          </div>
+
+          <div class="grid two">
+            <article class="card">
+              <h3>Quality Machinery</h3>
+              <p>
+                The suite includes pure logic tests for narration and date formatting, mocked parser tests for
+                SPARQL and Wikibase REST shapes, route tests through Flask's test client, and a specific degradation
+                test showing one failed enrichment layer does not sink the whole article.
+              </p>
+              <div class="chips">
+                <span class="pill">pytest</span>
+                <span class="pill">responses</span>
+                <span class="pill">pytest-cov</span>
+                <span class="pill">ruff</span>
+                <span class="pill">mypy</span>
+                <span class="pill">jsonschema</span>
+              </div>
+            </article>
+            <article class="card">
+              <h3>Human-In-The-Loop Boundary</h3>
+              <p>
+                Code review, deployment choice, and release validation remain human responsibilities. The project
+                includes docs for deployment and Linked Art schema validation, but no branch-protection policy,
+                production alerting, or runbook automation is visible in the repository.
+              </p>
+            </article>
+          </div>
+
+          <figure class="card diagram" style="margin-top: 14px" role="group" aria-labelledby="quality-caption">
+            <svg viewBox="0 0 1000 260" role="img" aria-labelledby="quality-svg-title quality-svg-desc">
+              <title id="quality-svg-title">Quality loop diagram</title>
+              <desc id="quality-svg-desc">
+                The development loop moves from tests and specs, to implementation, to linting, type checking, pytest,
+                schema validation, review, and deployment.
+              </desc>
+              <defs>
+                <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#e8bc5b"></path>
+                </marker>
+              </defs>
+              <rect width="1000" height="260" fill="#0a0f16"></rect>
+              <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15">
+                <g fill="#182434" stroke="#334154">
+                  <rect x="42" y="78" width="150" height="82" rx="8"></rect>
+                  <rect x="236" y="78" width="150" height="82" rx="8"></rect>
+                  <rect x="430" y="78" width="150" height="82" rx="8"></rect>
+                  <rect x="624" y="78" width="150" height="82" rx="8"></rect>
+                  <rect x="818" y="78" width="140" height="82" rx="8"></rect>
+                </g>
+                <text x="72" y="114" fill="#eef4ff" font-weight="700">Write spec</text>
+                <text x="73" y="140" fill="#aeb9c8">tests/docs</text>
+                <text x="268" y="114" fill="#eef4ff" font-weight="700">Implement</text>
+                <text x="264" y="140" fill="#aeb9c8">deterministic</text>
+                <text x="463" y="114" fill="#eef4ff" font-weight="700">Verify</text>
+                <text x="452" y="140" fill="#aeb9c8">ruff · mypy</text>
+                <text x="650" y="114" fill="#eef4ff" font-weight="700">pytest</text>
+                <text x="646" y="140" fill="#aeb9c8">69 tests</text>
+                <text x="843" y="114" fill="#eef4ff" font-weight="700">Review</text>
+                <text x="836" y="140" fill="#aeb9c8">ship when green</text>
+                <g stroke="#e8bc5b" stroke-width="2" marker-end="url(#arrow2)">
+                  <line x1="192" y1="119" x2="236" y2="119"></line>
+                  <line x1="386" y1="119" x2="430" y2="119"></line>
+                  <line x1="580" y1="119" x2="624" y2="119"></line>
+                  <line x1="774" y1="119" x2="818" y2="119"></line>
+                </g>
+              </g>
+            </svg>
+            <figcaption id="quality-caption">
+              CI reproduces this loop on pushes and pull requests targeting <code>main</code>.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="data" aria-labelledby="data-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Memory, State, Data</p>
+              <h2 id="data-title">Mostly stateless, with bounded process memory.</h2>
+            </div>
+            <p>
+              There is no database in the repository. The system remembers only ephemeral runtime results, client
+              preferences, generated cards, and cacheable external metadata; canonical data remains in Wikidata,
+              Wikimedia Commons, and Wikipedia.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Where It Lives</th>
+                  <th>Lifespan / Semantics</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Canonical facts</strong></td>
+                  <td>Wikidata Query Service and Wikibase REST API</td>
+                  <td>External source of record for artworks, artists, entities, relationships, qualifiers, and references.</td>
+                </tr>
+                <tr>
+                  <td><strong>Contextual text</strong></td>
+                  <td>Wikipedia REST summaries</td>
+                  <td>Attributed external summaries used as enrichment, not as uncited generated prose.</td>
+                </tr>
+                <tr>
+                  <td><strong>Images and dimensions</strong></td>
+                  <td>Wikimedia Commons image URLs and imageinfo API</td>
+                  <td>Artwork thumbnails, full-resolution image metadata, IIIF canvas dimensions, and OG card source images.</td>
+                </tr>
+                <tr>
+                  <td><strong>Server caches</strong></td>
+                  <td>OrderedDict instances in <code>app.py</code> and <code>iiif.py</code></td>
+                  <td>Bounded, per-process caches for daily galleries, details, article payloads, enrichment, Linked Art, share HTML, OG images, and Commons dimensions.</td>
+                </tr>
+                <tr>
+                  <td><strong>Client preference</strong></td>
+                  <td>Browser <code>localStorage</code></td>
+                  <td>Persists gallery/dark mode only; no accounts or server-side user profiles are present.</td>
+                </tr>
+                <tr>
+                  <td><strong>Configuration</strong></td>
+                  <td>Environment variables</td>
+                  <td>Optional contact URL/email, rate-limit settings, cache size, and rate-limit storage backend.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="snapshot" aria-labelledby="snapshot-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Live System Snapshot</p>
+              <h2 id="snapshot-title">Current entities are open-data entities, not app-owned rows.</h2>
+            </div>
+            <p>
+              The repository does not define persistent database tables. The live shape is better understood as
+              route families and external entity classes.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Entity / Surface</th>
+                  <th>Approximate Count or Role</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Artwork candidates</strong></td>
+                  <td>Dynamic Wikidata query: paintings by artists born on the selected month/day</td>
+                  <td><code>birthday_paintings</code> in <code>app.py</code></td>
+                </tr>
+                <tr>
+                  <td><strong>User-facing API routes</strong></td>
+                  <td>Gallery, resolve, surprise, details, article, enrichment, health, legal, share, and OG image routes</td>
+                  <td>Route declarations in <code>app.py</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Linked Art records</strong></td>
+                  <td>7 record types: object, visual, person, place, group, concept, set</td>
+                  <td><code>linked_art.py</code> and route tests</td>
+                </tr>
+                <tr>
+                  <td><strong>IIIF manifests</strong></td>
+                  <td>One manifest per displayable artwork with a Commons image</td>
+                  <td><code>/iiif/&lt;QID&gt;/manifest.json</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Tenancy model</strong></td>
+                  <td>Single public site; no user accounts or tenants in repo</td>
+                  <td>No auth, account, tenant, or database modules are present</td>
+                </tr>
+                <tr>
+                  <td><strong>Analytics</strong></td>
+                  <td>Aggregate browser events via Google Analytics 4</td>
+                  <td><code>static/index.html</code> includes a GA4 tag and event calls</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="evaluation" aria-labelledby="evaluation-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Honest Evaluation</p>
+              <h2 id="evaluation-title">Strong thesis, credible implementation, visible next hardening work.</h2>
+            </div>
+            <p>
+              The project is unusually grounded for a portfolio-scale data app. Its main risks are operational:
+              shared Wikimedia dependency behavior, single-process state, externally hosted frontend assets, and
+              limited production observability.
+            </p>
+          </div>
+
+          <h3 style="margin-bottom: 12px">Strengths Worth Protecting</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Strength</th>
+                  <th>Why It Matters</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Deterministic content path</strong></td>
+                  <td>Factual trust is a product feature: every article section is assembled from structured statements or attributed summaries, not free-form generation.</td>
+                </tr>
+                <tr>
+                  <td><strong>Right-sized API split</strong></td>
+                  <td>SPARQL handles graph-shaped queries while Wikibase REST handles qualifiers and references, matching each API to its strengths.</td>
+                </tr>
+                <tr>
+                  <td><strong>Progressive enrichment</strong></td>
+                  <td>Base content can render before slower layers finish, and tests confirm a failed enrichment query drops only that section.</td>
+                </tr>
+                <tr>
+                  <td><strong>Interoperability posture</strong></td>
+                  <td>Linked Art JSON-LD, IIIF Presentation 3.0, HAL links, CORS, and authority equivalents make the output useful beyond the app UI.</td>
+                </tr>
+                <tr>
+                  <td><strong>Quality automation</strong></td>
+                  <td>CI covers lint, formatting, type checking, import smoke tests, pytest, and coverage over the most important Python modules.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 style="margin: 24px 0 12px">Risks &amp; Gaps</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Severity</th>
+                  <th>Gap</th>
+                  <th>Detail</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="sev high">HIGH</span></td>
+                  <td><strong>Single-process cache and rate-limit defaults</strong></td>
+                  <td>Memory-backed caches and rate limits are appropriate for one Waitress process, but multi-instance deployments need Redis or another shared backend.</td>
+                  <td>Open; documented in deploy notes</td>
+                </tr>
+                <tr>
+                  <td><span class="sev med">MED</span></td>
+                  <td><strong>Observability is minimal</strong></td>
+                  <td>Errors are largely printed, and the roadmap explicitly calls out structured logging and error tracking as future work.</td>
+                  <td>Open</td>
+                </tr>
+                <tr>
+                  <td><span class="sev med">MED</span></td>
+                  <td><strong>Frontend depends on public CDNs</strong></td>
+                  <td>The static page loads GA4, Bootswatch, FontAwesome, jQuery, Popper, Bootstrap, and OpenSeadragon from external URLs. That simplifies shipping but creates availability, privacy, and CSP/SRI hardening work.</td>
+                  <td>Partial</td>
+                </tr>
+                <tr>
+                  <td><span class="sev med">MED</span></td>
+                  <td><strong>No browser-level E2E suite</strong></td>
+                  <td>Route tests are strong, but there is no visible Playwright/Cypress coverage for date browsing, explore navigation, theme persistence, share UI, or deep zoom.</td>
+                  <td>Open</td>
+                </tr>
+                <tr>
+                  <td><span class="sev low">LOW</span></td>
+                  <td><strong>Documentation drift</strong></td>
+                  <td><code>WIKIDATA.md</code> still mentions five Linked Art types in one section while the code and newer README/roadmap show seven.</td>
+                  <td>Open cleanup</td>
+                </tr>
+                <tr>
+                  <td><span class="sev low">LOW</span></td>
+                  <td><strong>Live schema validation is manual</strong></td>
+                  <td><code>validate_linked_art.py</code> exists, but the main CI workflow does not run it, likely because it builds live sample records.</td>
+                  <td>Partial</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="improvements" aria-labelledby="improvements-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Recommended Improvements</p>
+              <h2 id="improvements-title">Concrete upgrades that fit the current architecture.</h2>
+            </div>
+            <p>
+              These are intentionally repo-specific: they extend the existing Flask, test, and open-data model
+              rather than changing the product into a different system.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Improvement</th>
+                  <th>Why / Payoff</th>
+                  <th>Effort</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1</strong></td>
+                  <td><strong>Add structured logging and request correlation</strong></td>
+                  <td>Replace scattered <code>print</code> calls with JSON-friendly logs carrying route, QID, latency, cache hit/miss, and upstream failure type.</td>
+                  <td>S</td>
+                </tr>
+                <tr>
+                  <td><strong>2</strong></td>
+                  <td><strong>Add Playwright smoke tests for the main user journeys</strong></td>
+                  <td>Protect the browser workflows that route tests cannot see: daily load, explore click, date picker, gallery mode, share button, and deep zoom.</td>
+                  <td>M</td>
+                </tr>
+                <tr>
+                  <td><strong>3</strong></td>
+                  <td><strong>Make shared cache/rate-limit storage a first-class deploy mode</strong></td>
+                  <td>Add a tested Redis configuration path and deployment notes for multi-instance hosts, while keeping memory storage as local default.</td>
+                  <td>M</td>
+                </tr>
+                <tr>
+                  <td><strong>4</strong></td>
+                  <td><strong>Harden frontend asset delivery</strong></td>
+                  <td>Pin or vendor external assets, add SRI/CSP guidance, and remove unused legacy dependencies if Bootstrap JS/jQuery are not needed.</td>
+                  <td>M</td>
+                </tr>
+                <tr>
+                  <td><strong>5</strong></td>
+                  <td><strong>Add citation footnotes for Wikibase references</strong></td>
+                  <td>The REST layer already exposes reference sources; surfacing URLs and source labels would make the trust thesis even more inspectable.</td>
+                  <td>M</td>
+                </tr>
+                <tr>
+                  <td><strong>6</strong></td>
+                  <td><strong>Reconcile docs and generated standard claims</strong></td>
+                  <td>Update older references to five Linked Art types, and add a short matrix showing which route maps to which schema file.</td>
+                  <td>S</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <strong>If only one thing:</strong> add structured observability around upstream calls and cache behavior.
+            The system depends on external public APIs; knowing what failed, how often, and for which QIDs is the
+            highest-leverage production improvement.
+          </div>
+        </div>
+      </section>
+
+      <section id="usage" aria-labelledby="usage-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Usage Instructions</p>
+              <h2 id="usage-title">Run locally with Python; deploy as a WSGI container.</h2>
+            </div>
+            <p>
+              The app requires Python 3.10+ per project docs and runs on Python 3.12 in CI and the Docker image.
+              Runtime dependencies are Flask, Flask-Limiter, Pillow, requests, and Waitress.
+            </p>
+          </div>
+          <div class="grid two">
+            <article class="card">
+              <h3>Local Setup</h3>
+              <div class="commands">
+                <pre><code>python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+python serve.py</code></pre>
+                <pre><code>pytest -q
+ruff check .
+ruff format --check .
+mypy</code></pre>
+              </div>
+            </article>
+            <article class="card">
+              <h3>Configuration</h3>
+              <p>
+                All environment variables are optional. Set <code>AOTD_CONTACT</code> in public deployments so
+                Wikimedia requests include a responsible contact. Tune <code>AOTD_RATELIMIT_DEFAULT</code>,
+                <code>AOTD_RATELIMIT_STORAGE</code>, <code>AOTD_RATELIMIT_ENABLED</code>, and <code>AOTD_CACHE_MAX</code>
+                when traffic or topology changes.
+              </p>
+              <div class="commands">
+                <pre><code>docker build -f Dockerfile.web -t aotd-web .
+docker run --rm -p 5000:5000 -e AOTD_CONTACT=https://your/contact aotd-web</code></pre>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <div>
+          <strong>Artwork of the Day</strong>
+          <span class="mono"> · essence · architecture · discipline · evaluation</span>
+        </div>
+        <div class="source-note">
+          Repository audit date: June 29, 2026. External standards sanity-checked against current official
+          documentation for Wikidata data access and REST API, IIIF Presentation API 3.0, and Linked Art API 1.0.
+          Code license: MIT; facts and media licensing remain governed by their upstream Wikidata, Wikipedia, and
+          Wikimedia Commons sources.
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
