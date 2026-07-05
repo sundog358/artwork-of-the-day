@@ -30,3 +30,7 @@ Thumbs.db
 # Coverage data
 .coverage
 htmlcov/
+
+# Met ActivityStreams consumer — runtime candidate pool / reconciliation cursor
+met_candidates.json
+met_candidates.json.tmp

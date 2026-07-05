@@ -28,6 +28,7 @@ files = [
   "article_writer.py",
   "sparql_library.py",
   "enrichment.py",
+  "met_activity.py",
   "app.py",
 ]
 follow_imports = "silent"

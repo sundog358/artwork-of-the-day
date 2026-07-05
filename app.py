@@ -43,6 +43,7 @@ import article_writer  # noqa: E402  (imported after .env is loaded)
 import enrichment  # noqa: E402
 import iiif  # noqa: E402
 import linked_art  # noqa: E402
+import met_activity  # noqa: E402  (Meta Museum ActivityStreams consumer)
 import og_card  # noqa: E402
 import sparql_library  # noqa: E402
 import wikibase_rest  # noqa: E402
@@ -266,6 +267,88 @@ def healthz():
 def legal():
     """Licenses & attribution page (Wikidata CC0, Wikipedia CC BY-SA, Commons)."""
     return app.send_static_file("legal.html")
+
+
+# --- Meta Museum ActivityStreams consumer ---------------------------------- #
+# Daily consumes the Meta Museum (metamuseum.org) IIIF Change Discovery feed as
+# a distinct external consumer (`daily-metahistorybook-prod`) and keeps a small
+# candidate pool of recently-changed paintings. See met_activity.py. `status`
+# reads local state (cheap, exempt); `refresh` fans out to Meta Museum so it is
+# tightly limited. (The `met` in the paths is the provider=met slice — the
+# Metropolitan objects Meta Museum republishes — not the partner's name.)
+@app.route("/api/consumer/met", methods=["GET"])
+@limiter.exempt  # reads the local persisted pool only; no outbound requests
+def met_consumer_status():
+    """The Meta Museum consumer's current pool + reconciliation cursor (no fetch)."""
+    return jsonify(met_activity.summary()), 200
+
+
+@app.route("/api/consumer/met/refresh", methods=["GET", "POST"])
+@limiter.limit("6 per hour")  # each call walks the Meta Museum feed; keep it courteous
+def met_consumer_refresh():
+    """Consume new Meta Museum activity into the candidate pool; returns a summary."""
+    try:
+        return jsonify(met_activity.refresh()), 200
+    except requests.RequestException as e:
+        return jsonify({"status": "error", "message": f"Meta Museum feed unavailable: {e}"}), 502
+
+
+@app.route("/api/consumer/met/pick", methods=["GET"])
+def met_consumer_pick():
+    """Draw one painting from the pool — a supplementary artwork-of-the-day.
+
+    Deterministic per ?seed= (defaults to today's date, matching Daily's own
+    per-date selection), so the suggestion is stable for the calendar day.
+    """
+    seed = request.args.get("seed") or datetime.now().strftime("%Y-%m-%d")
+    candidate = met_activity.pick(seed=seed)
+    if candidate is None:
+        return jsonify({"status": "empty", "message": "Candidate pool is empty."}), 404
+    return jsonify({"status": "success", "seed": seed, "candidate": candidate}), 200
+
+
+# Public callback Meta Museum can register for daily-metahistorybook-prod. GET is
+# a verification handshake (who we are + what we accept); POST receives one
+# activity or a batch and applies each to the pool. When AOTD_MET_CALLBACK_TOKEN
+# is set, POSTs must carry it in x-webhook-secret. Payload is capped and only
+# Meta-Museum-host object ids are ever dereferenced (SSRF guard in met_activity).
+_MET_CALLBACK_MAX_BATCH = 50
+
+
+@app.route("/api/consumer/met/callback", methods=["GET", "POST"])
+@limiter.limit("240 per hour")  # push traffic; roomy but bounded
+def met_consumer_callback():
+    """IIIF Change Discovery callback for Create / Update / Delete activities."""
+    if request.method == "GET":
+        return jsonify(
+            {
+                "status": "ready",
+                "consumer_id": met_activity.CONSUMER_ID,
+                "accepts": list(met_activity.ACCEPTED_EVENTS),
+                "callback": request.base_url,
+            }
+        ), 200
+
+    secret = os.environ.get("AOTD_MET_CALLBACK_TOKEN")
+    if secret and request.headers.get("x-webhook-secret") != secret:
+        return jsonify({"status": "error", "message": "invalid or missing callback secret"}), 401
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"status": "error", "message": "expected a JSON activity or list"}), 400
+    activities = payload if isinstance(payload, list) else [payload]
+    if len(activities) > _MET_CALLBACK_MAX_BATCH:
+        return jsonify({"status": "error", "message": "batch too large"}), 413
+
+    try:
+        results = [met_activity.apply_activity(a) for a in activities if isinstance(a, dict)]
+    except requests.RequestException as e:
+        # A needed dereference failed — signal retryable so Meta Museum can resend.
+        return jsonify({"status": "error", "message": f"dereference failed: {e}"}), 502
+
+    return jsonify(
+        {"status": "accepted", "consumer_id": met_activity.CONSUMER_ID, "results": results}
+    ), 202
 
 
 # Most artworks to expose in the day's gallery.
