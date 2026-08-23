@@ -337,7 +337,9 @@ def test_iiif_manifest_route(client, monkeypatch):
     monkeypatch.setattr(SL, "artwork_facts", lambda q: dict(ARTWORK))
     monkeypatch.setattr(SL, "creator_of", lambda q: "Q762")
     monkeypatch.setattr(SL, "artist_facts", lambda q: dict(ARTIST))
-    monkeypatch.setattr(iiif, "image_info", lambda url: ("https://upload/x.jpg", 7601, 11348))
+    monkeypatch.setattr(
+        iiif, "image_info", lambda url: ("https://upload/x.jpg", 7601, 11348, "image/jpeg")
+    )
     r = client.get("/iiif/Q12418/manifest.json")
     body = r.get_json()
     assert r.status_code == 200

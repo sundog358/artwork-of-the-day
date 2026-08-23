@@ -97,6 +97,7 @@ def test_iiif_manifest_builds_from_commons_imageinfo():
                                 "url": "https://upload.wikimedia.org/x/Mona_Lisa.jpg",
                                 "width": 7601,
                                 "height": 11348,
+                                "mime": "image/jpeg",
                             }
                         ]
                     }
@@ -114,7 +115,53 @@ def test_iiif_manifest_builds_from_commons_imageinfo():
     assert man["type"] == "Manifest"
     assert (canvas["width"], canvas["height"]) == (7601, 11348)
     assert canvas["items"][0]["items"][0]["body"]["id"].endswith("Mona_Lisa.jpg")
+    assert canvas["items"][0]["items"][0]["body"]["format"] == "image/jpeg"
     assert len(man["metadata"]) == 1  # empty Date dropped
+
+
+@responses.activate
+def test_iiif_manifest_declares_the_commons_media_type_not_jpeg():
+    """A non-JPEG Commons file must not be described as image/jpeg.
+
+    Commons serves PNG, TIFF and WebP under the same Special:FilePath shape, so
+    a hardcoded format silently mislabels the body and a strict viewer is
+    entitled to reject it.
+    """
+    IIIF._info_cache.clear()
+    responses.add(
+        responses.GET,
+        IIIF._COMMONS_API,
+        json={
+            "query": {
+                "pages": {
+                    "-1": {
+                        "imageinfo": [
+                            {
+                                "url": "https://upload.wikimedia.org/x/Sunflowers.png",
+                                "width": 1200,
+                                "height": 1600,
+                                "mime": "image/png",
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+    )
+    man = IIIF.manifest(
+        title="Sunflowers",
+        manifest_uri="https://x.org/iiif/Q1/manifest.json",
+        image_filepath="https://commons.wikimedia.org/wiki/Special:FilePath/Sunflowers.png",
+    )
+    assert man["items"][0]["items"][0]["items"][0]["body"]["format"] == "image/png"
+
+
+def test_image_format_falls_back_to_the_extension_then_to_jpeg():
+    """The API is the source of truth, the extension is the backstop."""
+    assert IIIF._image_format("image/tiff", "https://x/a.png") == "image/tiff"
+    assert IIIF._image_format(None, "https://x/a.png") == "image/png"
+    assert IIIF._image_format("text/html", "https://x/a.webp") == "image/webp"
+    assert IIIF._image_format(None, "https://x/no-extension") == "image/jpeg"
 
 
 def test_linked_art_endpoints_send_cors_and_vary():
