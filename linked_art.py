@@ -24,6 +24,8 @@ References point at our own /place, /group, /person, /visual endpoints so a
 consumer can follow the graph; each of those carries the Wikidata `equivalent`.
 """
 
+from media_types import image_format
+
 CONTEXT = "https://linked.art/ns/v1/linked-art.json"
 _AAT = "http://vocab.getty.edu/aat/"
 
@@ -338,7 +340,7 @@ def object_record(
             {
                 "type": "DigitalObject",
                 "_label": "Image file",
-                "format": "image/jpeg",
+                "format": image_format(None, image),
                 "access_point": [{"id": image, "type": "DigitalObject"}],
             },
             {

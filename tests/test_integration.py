@@ -158,10 +158,38 @@ def test_iiif_manifest_declares_the_commons_media_type_not_jpeg():
 
 def test_image_format_falls_back_to_the_extension_then_to_jpeg():
     """The API is the source of truth, the extension is the backstop."""
-    assert IIIF._image_format("image/tiff", "https://x/a.png") == "image/tiff"
-    assert IIIF._image_format(None, "https://x/a.png") == "image/png"
-    assert IIIF._image_format("text/html", "https://x/a.webp") == "image/webp"
-    assert IIIF._image_format(None, "https://x/no-extension") == "image/jpeg"
+    from media_types import image_format
+
+    assert image_format("image/tiff", "https://x/a.png") == "image/tiff"
+    assert image_format(None, "https://x/a.png") == "image/png"
+    assert image_format("text/html", "https://x/a.webp") == "image/webp"
+    assert image_format(None, "https://x/no-extension") == "image/jpeg"
+    assert image_format(None, "https://x/a.PNG?width=800") == "image/png"
+
+
+def test_linked_art_image_declares_the_real_media_type():
+    """The Linked Art `shown_by` DigitalObject had the same hardcoded JPEG.
+
+    It is the sibling of the IIIF manifest body: same file, same claim, and it
+    is the record validated against the official Linked Art JSON Schemas.
+    """
+    import linked_art
+
+    rec = linked_art.object_record(
+        {
+            "title": "Sunflowers",
+            "image": "https://commons.wikimedia.org/wiki/Special:FilePath/Sunflowers.png",
+        },
+        {},
+        base="https://x.org",
+        object_uri="https://x.org/object/Q1",
+        person_uri="https://x.org/person/Q2",
+        artwork_qid="Q1",
+        artist_qid="Q2",
+    )
+    shown_by = rec["representation"][0]["digitally_shown_by"]
+    image_file = [d for d in shown_by if d.get("_label") == "Image file"]
+    assert image_file and image_file[0]["format"] == "image/png"
 
 
 def test_linked_art_endpoints_send_cors_and_vary():
